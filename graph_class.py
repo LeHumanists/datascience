@@ -1,3 +1,5 @@
+from identifiable_entity import IdentifiableEntity
+
 from csv import reader
 
 with open("meta.csv", "r", encoding="utf-8") as f:
@@ -5,25 +7,7 @@ with open("meta.csv", "r", encoding="utf-8") as f:
 
 from pprint import pprint
 
-pprint (type(meta))
-        
-with open("meta.csv", "r", encoding="utf-8") as f:
-    meta = reader(f)
-    next(meta) 
-    
-    for row in meta:
-        pprint(row)
-
-with open("meta.csv", "r", encoding="utf-8") as f:
-    meta = reader(f)
-    
-    print("--First iteration")
-    for row in meta:
-        pprint(row)   
-    
-    print("\n-- Second iteration")
-    for row in meta:
-        pprint(row)  
+pprint (type(meta)) 
         
 with open("meta.csv", "r", encoding="utf-8") as f:
     meta = reader(f)
@@ -44,18 +28,12 @@ class Person(object):
     def getName(self):
         return self.name
 
-my_meta_list =[ 
-    ["column name", "column name", "column name", "column name", "column name", "column name"],
 
-    ]
-pprint (my_meta_list)
 
-ninth_row = my_meta_list[8]
-print("-- ninth row")
-pprint(ninth_row)
 
-class CulturalHeritageObject(object):
-    def __init__(self,title, date, owner, place):
+class CulturalHeritageObject(IdentifiableEntity):
+    def __init__(self, entity_id, title, date, owner, place):
+        super().__init__(entity_id)
         self.title = title
         self.date = date
         self.owner = owner
