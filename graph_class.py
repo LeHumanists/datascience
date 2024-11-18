@@ -1,35 +1,17 @@
 from identifiable_entity import IdentifiableEntity
-
-from csv import reader
-
-with open("meta.csv", "r", encoding="utf-8") as f:
-    meta = reader(f)
-
+from csv import DictReader
 from pprint import pprint
+from person import Person
 
-pprint (type(meta)) 
-        
 with open("meta.csv", "r", encoding="utf-8") as f:
-    meta = reader(f)
-    meta_list = list(meta)
-    
-print("-- First execution")
-for row in meta_list:
-    pprint(row)  
+    meta = DictReader(f)
+    meta_dict = {row["Id"]: row for row in meta}
 
-print("\n-- Second executuion")
-for row in meta_list:
-    pprint(row)
+pprint(meta_dict)
 
-class Person(object):
-    def __init__ (self, name):
-        self.name = name
-        
-    def getName(self):
-        return self.name
-
-
-
+class Author(Person):
+    def __init__(self, name):
+        super().__init__(name)
 
 class CulturalHeritageObject(IdentifiableEntity):
     def __init__(self, entity_id, title, date, owner, place):
@@ -38,7 +20,8 @@ class CulturalHeritageObject(IdentifiableEntity):
         self.date = date
         self.owner = owner
         self.place = place
-        
+        self.authors = []  # Inicializa a lista de autores
+
     def getTitle(self):
         return self.title
     
@@ -51,32 +34,44 @@ class CulturalHeritageObject(IdentifiableEntity):
     def getPlace(self):
         return self.place
     
-class NauticalChart (CulturalHeritageObject):
+    def addAuthor(self, author):
+        if isinstance(author, Author):  # Verifica se é um autor
+            self.authors.append(author)
+    
+    def removeAuthor(self, author):
+        if author in self.authors:
+            self.authors.remove(author)
+
+    def getAuthors(self):
+        return [author.getName() for author in self.authors]
+
+# Classes específicas de objetos culturais
+class NauticalChart(CulturalHeritageObject):
     pass
 
-class ManuscriptPlate (CulturalHeritageObject):
+class ManuscriptPlate(CulturalHeritageObject):
     pass
 
-class ManuscriptVolume (CulturalHeritageObject):
+class ManuscriptVolume(CulturalHeritageObject):
     pass
 
-class PrintedVolume (CulturalHeritageObject):
+class PrintedVolume(CulturalHeritageObject):
     pass
 
-class PrintedMaterial (CulturalHeritageObject):
+class PrintedMaterial(CulturalHeritageObject):
     pass
 
-class Herbarium (CulturalHeritageObject):
+class Herbarium(CulturalHeritageObject):
     pass
 
-class Specimen (CulturalHeritageObject):
+class Specimen(CulturalHeritageObject):
     pass
 
-class Painting (CulturalHeritageObject):
+class Painting(CulturalHeritageObject):
     pass
 
-class Model (CulturalHeritageObject):
+class Model(CulturalHeritageObject):
     pass
 
-class Map (CulturalHeritageObject):
+class Map(CulturalHeritageObject):
     pass
