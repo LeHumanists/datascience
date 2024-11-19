@@ -2,6 +2,9 @@ from identifiable_entity import IdentifiableEntity
 from person import Person
 import pandas as pd
 import re
+from pprint import pprint
+
+f = pd.read_csv("data/meta.csv")
 
 class Author(Person):
     def __init__(self, name, identifier=None):
@@ -12,8 +15,8 @@ class Author(Person):
         return self.identifier
 
 class CulturalHeritageObject(IdentifiableEntity):
-    def __init__(self, entity_id, title, date, owner, place):
-        super().__init__(entity_id)
+    def __init__(self, id:str, title:str, date:str, owner:str, place:str):
+        super().__init__(id)
         self.title = title
         self.date = date
         self.owner = owner
@@ -73,3 +76,4 @@ class Model(CulturalHeritageObject):
 
 class Map(CulturalHeritageObject):
     pass
+
