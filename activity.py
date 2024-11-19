@@ -1,10 +1,12 @@
+from graph_class import CulturalHeritageObject
+
 class Activity(object):
     def __init__(self, institute, person, tools, start, end, refersTo):
         self.institute = institute
         self.person = person
-        self.tool = set()
+        self.tool = list()
         for t in tools:
-            self.tool.add(t)
+            self.tool.append(t)
 
         self.start = start
         self.end = end
@@ -19,8 +21,9 @@ class Activity(object):
         else:
             return None
 
-    #def getTools(self):
-     #   return self.tool[tool]
+    def getTools(self):
+        # it returns a list of strings
+        return self.tool
 
     def getStartDate(self):
         if self.start:
@@ -34,5 +37,5 @@ class Activity(object):
         else:
             return None
 
-    # def refersTo(self):
-    #   it has to return the CulturalHeritageObject 
+    def refersTo(self):
+        return CulturalHeritageObject
