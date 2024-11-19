@@ -1,17 +1,15 @@
 from identifiable_entity import IdentifiableEntity
-from csv import DictReader
-from pprint import pprint
 from person import Person
-
-with open("meta.csv", "r", encoding="utf-8") as f:
-    meta = DictReader(f)
-    meta_dict = {row["Id"]: row for row in meta}
-
-pprint(meta_dict)
+import pandas as pd
+import re
 
 class Author(Person):
-    def __init__(self, name):
+    def __init__(self, name, identifier=None):
         super().__init__(name)
+        self.identifier = identifier 
+        
+    def getIdentifier(self):
+        return self.identifier
 
 class CulturalHeritageObject(IdentifiableEntity):
     def __init__(self, entity_id, title, date, owner, place):
@@ -20,7 +18,7 @@ class CulturalHeritageObject(IdentifiableEntity):
         self.date = date
         self.owner = owner
         self.place = place
-        self.authors = []  # Inicializa a lista de autores
+        self.authors = [] 
 
     def getTitle(self):
         return self.title
@@ -35,7 +33,7 @@ class CulturalHeritageObject(IdentifiableEntity):
         return self.place
     
     def addAuthor(self, author):
-        if isinstance(author, Author):  # Verifica se é um autor
+        if isinstance(author, Author): 
             self.authors.append(author)
     
     def removeAuthor(self, author):
@@ -45,7 +43,7 @@ class CulturalHeritageObject(IdentifiableEntity):
     def getAuthors(self):
         return [author.getName() for author in self.authors]
 
-# Classes específicas de objetos culturais
+
 class NauticalChart(CulturalHeritageObject):
     pass
 
