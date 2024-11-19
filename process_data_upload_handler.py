@@ -18,7 +18,7 @@ class ProcessDataUploadHandler(UploadHandler):
     print(acquisitions)
 
     # dump acquisition info into a new json file
-    with open("acquisition_data.json", "w", encoding="utf-8") as f:
+    with open("data/acquisition_data.json", "w", encoding="utf-8") as f:
         dump(acquisitions, f, ensure_ascii=False, indent=4)
 
     # open new file in a pd dataframe
