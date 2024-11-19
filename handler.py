@@ -9,8 +9,7 @@ class Handler:
         self.dbPathOrUrl = url
 
 class UploadHandler(Handler):
-    def __init__(self):
-        pass
+    pass
 
     def pushDataToDb(self, file_path) -> bool:
         # return True if data is uploaded to the db
