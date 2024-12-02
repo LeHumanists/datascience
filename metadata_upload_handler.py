@@ -23,7 +23,6 @@ class ResourceURIs:
 
 class MetadataUploadHandler(UploadHandler): 
     def __init__(self):
-        super().__init__()
         self.my_graph = Graph()  # Initialize the RDF graph
         self.dbpedia = Namespace("http://dbpedia.org/resource/") 
         self.example = Namespace("http://example.org/")
