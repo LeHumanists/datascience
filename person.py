@@ -6,3 +6,4 @@ class Person(IdentifiableEntity):
         
     def getName(self):
         return self.name
+    

@@ -4,8 +4,6 @@ import pandas as pd
 import re
 from pprint import pprint
 
-f = pd.read_csv("data/meta.csv")
-
 class Author(Person):
     def __init__(self, name, identifier=None):
         super().__init__(name)

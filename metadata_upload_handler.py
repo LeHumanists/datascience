@@ -1,4 +1,5 @@
 import pandas as pd
+from pandas import DataFrame
 import re
 from rdflib import Graph, URIRef, Literal
 from rdflib.namespace import FOAF, DCTERMS, XSD
@@ -53,7 +54,7 @@ class MetadataUploadHandler(UploadHandler):
 
             # Add authors to the cultural object
             if isinstance(row["Author"], str) and row["Author"].strip():
-                authors = row["Author"].strip('\"').strip()
+                authors = row["Author"].strip('\"').strip().strip(";").split(";")  # Split authors by ";"
                 for author_string in authors:
                     # Use regex to find author ID with either VIAF or ULAN
                     author_id_match = re.search(r'\((VIAF|ULAN):(\d+)\)', author_string)  # Match both VIAF and ULAN formats
