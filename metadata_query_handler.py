@@ -1,5 +1,6 @@
-from SPARQLWrapper import SPARQLWrapper, JSON  # Assicurati che JSON sia importato
+import SPARQLWrapper,JSON  # Assicurati che JSON sia importato
 import pandas as pd
+import json  # Importazione del modulo standard json
 from query_handler import QueryHandler
 
 class MetadataQueryHandler(QueryHandler):
@@ -27,4 +28,10 @@ class MetadataQueryHandler(QueryHandler):
         """)
         sparql.setReturnFormat(JSON)
         results = sparql.query().convert()
+        
+        # Salvare i risultati in un file JSON
+        with open('results.json', 'w') as json_file:
+            json.dump(results, json_file, indent=4)  # Usa json.dump per salvare su file
+        
+        # Convertire in un DataFrame
         return pd.DataFrame([{"id": result["personId"]["value"], "name": result["name"]["value"]} for result in results["results"]["bindings"]])
