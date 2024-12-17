@@ -1,138 +1,40 @@
+import SPARQLWrapper,JSON  # Assicurati che JSON sia importato
 import pandas as pd
-from SPARQLWrapper import SPARQLWrapper
-import numpy as np
+import json  # Importazione del modulo standard json
+from query_handler import QueryHandler
 
-class MetadataQueryHandler:
-    def __init__(self, grp_endpoint):
-        """
-        Initialize the MetadataQueryHandler with a SPARQL endpoint URL.
-        """
-        self.dbPathOrUrl = grp_endpoint
+class MetadataQueryHandler(QueryHandler):
+    def __init__(self):
+        super().__init__()
 
     def getAllPeople(self):
-        query = """
-            SELECT DISTINCT ?author_id ?author_name
+        sparql = SPARQLWrapper(self.getDbPathOrUrl())
+        sparql.setQuery("""
+            PREFIX ulan: <http://vocab.getty.edu/ulan/>  # Prefisso ULAN
+            PREFIX viaf: <http://viaf.org/viaf/>        # Prefisso VIAF
+            SELECT ?personId ?name  # personId può essere un numero ULAN o VIAF
             WHERE {
-                ?object <https://schema.org/author> ?author .
-                ?author <https://schema.org/identifier> ?author_id .
-                ?author <https://schema.org/name> ?author_name .
-            }
-        """
-        sparql = SPARQLWrapper(self.dbPathOrUrl)
-        sparql.setReturnFormat(SPARQLWrapper.JSON)
-        sparql.setQuery(query)
-        
-        try:
-            ret = sparql.queryAndConvert()
-        except Exception as e:
-            print(f"Error executing SPARQL query: {e}")
-            return pd.DataFrame()  # Return an empty DataFrame on error
-        
-        # Convert query results into a DataFrame
-        df_columns = ret["head"]["vars"]
-        rows = [
-            {column: row[column]["value"] for column in df_columns if column in row}
-            for row in ret["results"]["bindings"]
-        ]
-        df = pd.DataFrame(rows, columns=df_columns).replace(np.nan, " ")
-        return df
-
-    def getAllCulturalHeritageObjects(self):
-        query = """
-            SELECT DISTINCT ?object ?id ?type ?title ?date ?owner ?place ?author ?author_name ?author_id 
-            WHERE { 
-                ?object <https://schema.org/identifier> ?id. 
-                ?object <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type. 
-                ?object <https://schema.org/name> ?title. 
-                ?object <https://schema.org/copyrightHolder> ?owner. 
-                ?object <https://schema.org/spatial> ?place. 
-                OPTIONAL{ ?object <https://schema.org/dateCreated> ?date. } 
-                OPTIONAL{ 
-                    ?object <https://schema.org/author> ?author. 
-                    ?author <https://schema.org/name> ?author_name. 
-                    ?author <https://schema.org/identifier> ?author_id.
+                {
+                    ?personId a ulan:Person ;  # Dati da ULAN
+                    ulan:name ?name .
+                }
+                UNION
+                {
+                    ?personId a viaf:Person ;  # Dati da VIAF
+                    viaf:name ?name .
                 }
             }
-        """
-        sparql = SPARQLWrapper(self.dbPathOrUrl)
-        sparql.setReturnFormat(SPARQLWrapper.JSON)
-        sparql.setQuery(query)
+        """)
+        sparql.setReturnFormat(JSON)
+        results = sparql.query().convert()
         
-        try:
-            ret = sparql.queryAndConvert()
-        except Exception as e:
-            print(f"Error executing SPARQL query: {e}")
-            return pd.DataFrame()  # Return an empty DataFrame on error
+        # Salvare i risultati in un file JSON
+        with open('results.json', 'w') as json_file:
+            json.dump(results, json_file, indent=4)  # Usa json.dump per salvare su file
         
-        # Convert query results into a DataFrame
-        df_columns = ret["head"]["vars"]
-        rows = [
-            {column: row[column]["value"] for column in df_columns if column in row}
-            for row in ret["results"]["bindings"]
-        ]
-        df = pd.DataFrame(rows, columns=df_columns).replace(np.nan, " ")
-        return df
-
-    def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame:
-        query = f"""
-            SELECT DISTINCT ?author ?author_name ?author_id 
-            WHERE {{ 
-                ?object <https://schema.org/identifier> '{object_id}'. 
-                ?object <https://schema.org/author> ?author. 
-                ?author <https://schema.org/name> ?author_name. 
-                ?author <https://schema.org/identifier> ?author_id. 
-            }}
-        """
-        sparql = SPARQLWrapper(self.dbPathOrUrl)
-        sparql.setReturnFormat(SPARQLWrapper.JSON)
-        sparql.setQuery(query)
-        
-        try:
-            ret = sparql.queryAndConvert()
-        except Exception as e:
-            print(f"Error executing SPARQL query: {e}")
-            return pd.DataFrame()  # Return an empty DataFrame on error
-        
-        # Convert query results into a DataFrame
-        df_columns = ret["head"]["vars"]
-        rows = [
-            {column: row[column]["value"] for column in df_columns if column in row}
-            for row in ret["results"]["bindings"]
-        ]
-        df = pd.DataFrame(rows, columns=df_columns).replace(np.nan, " ")
-        return df
-
-    def getCulturalHeritageObjectsAuthoredBy(self, personId: str) -> pd.DataFrame:
-        query = f"""
-            SELECT DISTINCT ?object ?id ?type ?title ?date ?owner ?place ?author ?author_name ?author_id 
-            WHERE {{ 
-                ?object <https://schema.org/identifier> ?id. 
-                ?object <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type. 
-                ?object <https://schema.org/name> ?title. 
-                ?object <https://schema.org/copyrightHolder> ?owner. 
-                ?object <https://schema.org/spatial> ?place. 
-                ?object <https://schema.org/author> ?author. 
-                ?author <https://schema.org/name> ?author_name.
-                ?author <https://schema.org/identifier> ?author_id.
-                OPTIONAL{{ ?object <https://schema.org/dateCreated> ?date. }}
-                FILTER CONTAINS(?author_id, '{personId}')
-            }}
-        """
-        sparql = SPARQLWrapper(self.dbPathOrUrl)
-        sparql.setReturnFormat(SPARQLWrapper.JSON)
-        sparql.setQuery(query)
-        
-        try:
-            ret = sparql.queryAndConvert()
-        except Exception as e:
-            print(f"Error executing SPARQL query: {e}")
-            return pd.DataFrame()  # Return an empty DataFrame on error
-        
-        # Convert query results into a DataFrame
-        df_columns = ret["head"]["vars"]
-        rows = [
-            {column: row[column]["value"] for column in df_columns if column in row}
-            for row in ret["results"]["bindings"]
-        ]
-        df = pd.DataFrame(rows, columns=df_columns).replace(np.nan, " ")
-        return df
+        # Convertire in un DataFrame
+        return pd.DataFrame([{"id": result["personId"]["value"], "name": result["name"]["value"]} for result in results["results"]["bindings"]])
+0 commit comments
+Comments
+0 (0)
+You're not receiving notifications from this thread.
