@@ -1,8 +1,5 @@
 from identifiable_entity import IdentifiableEntity
 from person import Person
-import pandas as pd
-import re
-from pprint import pprint
 
 class Author(Person):
     def __init__(self, name, identifier=None):
