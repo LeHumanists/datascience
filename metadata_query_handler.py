@@ -1,6 +1,7 @@
 from SPARQLWrapper import SPARQLWrapper, JSON # Assicurati che JSON sia importato
 import pandas as pd
 import json  # Importazione del modulo standard json
+import pandas as pd
 from query_handler import QueryHandler
 from metadata_upload_handler import MetadataUploadHandler
 
