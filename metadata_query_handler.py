@@ -7,13 +7,12 @@ from query_handler import QueryHandler
 class MetadataQueryHandler(QueryHandler):
     def __init__(self):
         super().__init__()
-        
+
     def getAllPeople(self):
         sparql = SPARQLWrapper(self.getDbPathOrUrl())
         sparql.setQuery("""
             PREFIX ulan: <http://vocab.getty.edu/ulan/>  # Prefisso ULAN
             PREFIX viaf: <http://viaf.org/viaf/>        # Prefisso VIAF
-
             SELECT ?personId ?name  # personId può essere un numero ULAN o VIAF
             WHERE {
                 {

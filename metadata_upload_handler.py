@@ -1,5 +1,6 @@
 import pandas as pd
 from pandas import DataFrame
+from pandas import Series
 import re
 from rdflib import Graph, URIRef, RDF, Literal
 from rdflib.namespace import FOAF, DCTERMS, XSD
