@@ -1,7 +1,8 @@
 import pandas as pd
 from handler import Handler
-from metadata_upload_handler import DataFrame
-from process_data_upload_handler import DataFrame
+""" from metadata_upload_handler import DataFrame
+from process_data_upload_handler import DataFrame """
+from pandas import DataFrame
 
 class QueryHandler(Handler): 
     def __init__(self, dbPathOrUrl: str = ""):  

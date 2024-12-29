@@ -113,6 +113,7 @@ class ProcessDataUploadHandler(UploadHandler):
         exporting_df, exporting_multi_valued = keep_single_valued(exporting_df)
         print("Acquisition df and multi-valued column:\n", acquisition_df, acquisition_multi_valued)
         print(acquisition_df.info())
+        
         # pushing tables to db
         with connect("relational.db") as con:
             acquisition_df.to_sql("Acquisition", con, if_exists="replace", index=False)
@@ -138,8 +139,7 @@ class ProcessDataUploadHandler(UploadHandler):
 """ rel_path = "relational.db"
 process = ProcessDataUploadHandler()
 process.setDbPathOrUrl(rel_path)
-process.pushDataToDb("data/process.json") """
-
+process.pushDataToDb("data/process.json")"""
     
 
 

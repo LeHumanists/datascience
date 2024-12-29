@@ -39,3 +39,24 @@ class Activity(object):
 
     def refersTo(self):
         return CulturalHeritageObject
+
+class Acquisition(Activity):
+    def __init__(self, institute, person, tools, start, end, refersTo, technique):
+        self.technique = technique
+
+        super().__init__(institute, person, tools, start, end, refersTo)
+    
+    def getTechnique(self):
+        return self.technique
+
+class Processing(Activity):
+    pass
+
+class Modelling(Activity):
+    pass
+
+class Optimising(Activity):
+    pass
+
+class Exporting(Activity):
+    pass
