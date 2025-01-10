@@ -1,16 +1,16 @@
 from graph_class import CulturalHeritageObject
 
 class Activity(object):
-    def __init__(self, institute, person, tools, start, end, refersTo):
+    def __init__(self, institute, person, tools, start, end, refers_to):
         self.institute = institute
         self.person = person
-        self.tool = list()
+        self.tools = list()
         for t in tools:
-            self.tool.append(t)
+            self.tools.append(t)
 
         self.start = start
         self.end = end
-        self.refersTo = refersTo
+        self.refers_to = refers_to
     
     def getResponsibleInstitute(self):
         return self.institute
