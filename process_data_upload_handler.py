@@ -54,7 +54,7 @@ class ProcessDataUploadHandler(UploadHandler):
             # assign datatype string to the entire dataframe
             df = pd.DataFrame(process_list, dtype="string")
             # then cast "tool" column to dtype object
-            df = df.astype({"tool": "object"}).dtypes
+            df["tool"] = df["tool"].astype("object")
             
             return df
 
@@ -100,7 +100,7 @@ class ProcessDataUploadHandler(UploadHandler):
                 # if the column has datatype object...
                 if datatype == object:
                     #... create a sub-dataframe containing the column and the unique_id and drop the multi-valued column from the dataframe
-                    multi_valued = process_df[[column_name, "unique_id"]]
+                    multi_valued = process_df[["unique_id", column_name]]
                     process_df.drop("tool", axis=1, inplace=True)
 
             # return the df and the popped column
@@ -120,9 +120,11 @@ class ProcessDataUploadHandler(UploadHandler):
             tools_dict = dict()
             for idx, row in multi_valued_df.iterrows():
                 # populate dictionary with unique identifiers as keys and lists of tools as values
-                tools_dict[row[0]] = row[1]
+                tools_dict[row[0]] = row[1] # replace with iloc
 
             print(tools_dict)
+
+            tools_dict = {key: [item.strip() for item in value.strip("[]").split(",") if item.strip()] for key, value in tools_dict.items()}
 
             tools = list(tools_dict.values())
             identifiers = list(tools_dict.keys())
@@ -134,7 +136,6 @@ class ProcessDataUploadHandler(UploadHandler):
 
             # iterate over each tool in the inner lists
             for tool_list in tools:
-                print(tool_list)
                 # and append it to the pandas series
                 if len(tool_list) < 1:
                     tools_unpacked.append("")
@@ -147,10 +148,16 @@ class ProcessDataUploadHandler(UploadHandler):
             # iterate over the list of identifiers
             for identifier in identifiers:
                 # and append each identifier to the series as many times as the length of the list which is the value of the key corresponding to the identifier in the tools_dict
-                if len(tools_dict[identifier]) < 1:
+                """ if len(tools_dict[identifier]) < 1:
                     identifiers_unpacked.append(identifier)
                 else:
                     for n in range(len(tools_dict[identifier])):
+                        identifiers_unpacked.append(identifier) """
+                list_length = len(tools_dict[identifier])
+                if list_length < 1:
+                    identifiers_unpacked.append(identifier)
+                else:
+                    for n in range(list_length):
                         identifiers_unpacked.append(identifier)
 
             print("list for identifiers:\n", identifiers_unpacked)
@@ -178,7 +185,7 @@ class ProcessDataUploadHandler(UploadHandler):
         
         # function calls
         merged_tools_df = merge_mv_tables(ac_tools_df, pr_tools_df, md_tools_df, op_tools_df, ex_tools_df)
-
+        print("The merged dataframe:\n", merged_tools_df)
         
         # pushing tables to db
         with connect("relational.db") as con:
