@@ -45,7 +45,7 @@ class ProcessDataQueryHandler(QueryHandler):
                     # partial match
                     elif partialName.lower() in item.lower():
                         institution_df = activities.query("`responsible institute` == @item")
-    
+                
         return institution_df
     
     def getActivitiesByResponsiblePerson(self, partialName):
@@ -56,10 +56,10 @@ class ProcessDataQueryHandler(QueryHandler):
                     # exact match
                     if partialName.lower() == person.lower():
                         # use backticks to refer to column names containing spaces and @ for variables
-                        person_df = activities.query("`responsible institute` == @person")
+                        person_df = activities.query("`responsible person` == @person")
                     # partial match
                     elif partialName.lower() in person.lower():
-                        person_df = activities.query("`responsible institute` == @person")
+                        person_df = activities.query("`responsible person` == @person")
 
         return person_df
     

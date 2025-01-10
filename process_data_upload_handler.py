@@ -1,9 +1,11 @@
-from handler import Handler, UploadHandler
 import pandas as pd
 from pandas import DataFrame
 from pandas import Series
+from pandas import concat
+from collections import deque
 from json import load
 from sqlite3 import connect
+from handler import Handler, UploadHandler
 
 class ProcessDataUploadHandler(UploadHandler):
     pass
@@ -49,13 +51,11 @@ class ProcessDataUploadHandler(UploadHandler):
         # function for populating dataframes from lists
         def populateDf(process_list): 
         
-            df = pd.DataFrame(process_list)
-            # iterate over columns in the df for associating datatype
-            for column_name, column in df.items():
-                if column_name == "tool":
-                    df = df.astype("string")
-                else:
-                    df = df.astype(dtype={"tool": "object"})
+            # assign datatype string to the entire dataframe
+            df = pd.DataFrame(process_list, dtype="string")
+            # then cast "tool" column to dtype object
+            df["tool"] = df["tool"].astype("object")
+            
             return df
 
         # function calls
@@ -71,7 +71,7 @@ class ProcessDataUploadHandler(UploadHandler):
         # create unique identifiers and append id column to df
         def createUniqueId(process_df, df_name):
             id = []
-            # iterate over dataframe rowa
+            # iterate over dataframe rows
             for idx, row in process_df.iterrows():
                 # at each iteration, append to the list a string composed by dataframe name + underscore + the index of the row to be used as unique identifier
                 id.append(str(df_name) + "_" + str(idx))
@@ -99,8 +99,9 @@ class ProcessDataUploadHandler(UploadHandler):
             for column_name, datatype in dtypes.items():
                 # if the column has datatype object...
                 if datatype == object:
-                    #... pop the column from the df
-                    multi_valued = process_df.pop(column_name)
+                    #... create a sub-dataframe containing the column and the unique_id and drop the multi-valued column from the dataframe
+                    multi_valued = process_df[["unique_id", column_name]]
+                    process_df.drop("tool", axis=1, inplace=True)
 
             # return the df and the popped column
             return process_df, multi_valued
@@ -111,8 +112,80 @@ class ProcessDataUploadHandler(UploadHandler):
         modelling_df, modelling_multi_valued = keep_single_valued(modelling_df)
         optimising_df, optimising_multi_valued = keep_single_valued(optimising_df)
         exporting_df, exporting_multi_valued = keep_single_valued(exporting_df)
-        print("Acquisition df and multi-valued column:\n", acquisition_df, acquisition_multi_valued)
+        print("Acquisition df and multi-valued df:\n", acquisition_df, acquisition_multi_valued)
         print(acquisition_df.info())
+        
+        # create multi-valued attributes tables
+        def create_multi_valued_tables(multi_valued_df):
+            tools_dict = dict()
+            for idx, row in multi_valued_df.iterrows():
+                # populate dictionary with unique identifiers as keys and lists of tools as values
+                tools_dict[row[0]] = row[1] # replace with iloc
+
+            print(tools_dict)
+
+            tools_dict = {key: [item.strip() for item in value.strip("[]").split(",") if item.strip()] for key, value in tools_dict.items()}
+
+            tools = list(tools_dict.values())
+            identifiers = list(tools_dict.keys())
+            tools_unpacked = []
+            identifiers_unpacked = []
+
+            print("The list of tools:\n", tools)
+            print("The list of identifiers:\n", identifiers)
+
+            # iterate over each tool in the inner lists
+            for tool_list in tools:
+                # and append it to the pandas series
+                if len(tool_list) < 1:
+                    tools_unpacked.append("")
+                else:
+                    for t in tool_list:
+                        tools_unpacked.append(t)
+
+            print("list for tools:\n", tools_unpacked)
+
+            # iterate over the list of identifiers
+            for identifier in identifiers:
+                # and append each identifier to the series as many times as the length of the list which is the value of the key corresponding to the identifier in the tools_dict
+                """ if len(tools_dict[identifier]) < 1:
+                    identifiers_unpacked.append(identifier)
+                else:
+                    for n in range(len(tools_dict[identifier])):
+                        identifiers_unpacked.append(identifier) """
+                list_length = len(tools_dict[identifier])
+                if list_length < 1:
+                    identifiers_unpacked.append(identifier)
+                else:
+                    for n in range(list_length):
+                        identifiers_unpacked.append(identifier)
+
+            print("list for identifiers:\n", identifiers_unpacked)
+
+            # create a list that contains the two series and join them in a dataframe where each series is a column
+            tools_series = pd.Series(tools_unpacked, dtype="string", name="tool")
+            identifiers_series = pd.Series(identifiers_unpacked, dtype="string", name="unique_id")
+            tools_df = pd.concat([identifiers_series, tools_series], axis=1)
+            print("The dataframe for tools:\n", tools_df)
+            
+            return tools_df
+
+        # function calls...
+        ac_tools_df = create_multi_valued_tables(acquisition_multi_valued)
+        pr_tools_df = create_multi_valued_tables(processing_multi_valued)
+        md_tools_df = create_multi_valued_tables(modelling_multi_valued)
+        op_tools_df = create_multi_valued_tables(optimising_multi_valued)
+        ex_tools_df = create_multi_valued_tables(exporting_multi_valued)
+
+        # function for merging tools-id tables
+        def merge_mv_tables(table_1, table_2, table_3, table_4, table_5):
+            merged = concat([table_1, table_2, table_3, table_4, table_5], ignore_index=True)
+
+            return merged
+        
+        # function calls
+        merged_tools_df = merge_mv_tables(ac_tools_df, pr_tools_df, md_tools_df, op_tools_df, ex_tools_df)
+        print("The merged dataframe:\n", merged_tools_df)
         
         # pushing tables to db
         with connect("relational.db") as con:
@@ -121,6 +194,7 @@ class ProcessDataUploadHandler(UploadHandler):
             modelling_df.to_sql("Modelling", con, if_exists="replace", index=False)
             optimising_df.to_sql("Optimising", con, if_exists="replace", index=False)
             exporting_df.to_sql("Exporting", con, if_exists="replace", index=False)
+            merged_tools_df.to_sql("Tools", con, if_exists="replace", index=False)
         
             # check and return result
             rel_db_ac = pd.read_sql("SELECT * FROM Acquisition", con)
@@ -128,29 +202,22 @@ class ProcessDataUploadHandler(UploadHandler):
             rel_db_md = pd.read_sql("SELECT * FROM Modelling", con)
             rel_db_op = pd.read_sql("SELECT * FROM Optimising", con)
             rel_db_ex = pd.read_sql("SELECT * FROM Exporting", con)
+            rel_db_tl = pd.read_sql("SELECT * FROM Tools", con)
 
-            populated_tables = not any(df.empty for df in [rel_db_ac, rel_db_pr, rel_db_op, rel_db_md, rel_db_ex])
+            populated_tables = not any(df.empty for df in [rel_db_ac, rel_db_pr, rel_db_op, rel_db_md, rel_db_ex, rel_db_tl]) # add rel_db_tl
             print(populated_tables)
             return populated_tables
 
 
 
 # for uploading data to db (and testing)
-""" rel_path = "relational.db"
+rel_path = "relational.db"
+file_path = "data/process.json"
 process = ProcessDataUploadHandler()
 process.setDbPathOrUrl(rel_path)
-process.pushDataToDb("data/process.json")"""
-    
+process.pushDataToDb(file_path)
 
 
-
-
-
-
-
-
-    
-    
 
     
 

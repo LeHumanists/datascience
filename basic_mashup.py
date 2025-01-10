@@ -11,22 +11,35 @@ import json  # Importazione del modulo standard json
 from typing import List
 
 class BasicMashup:
-    def __init__(self, MetadataQuery, ProcessQuery):
-        self.metadataQuery = MetadataQuery  # Store list of MetadataQueryHandler objects
-        self.processQuery = ProcessQuery    # Store list of ProcessDataQueryHandler objects
+    def __init__(self, metadataQuery=None, processQuery=None):
+        """Initialize metadataQuery and processQuery as lists of handler objects."""
+        self.metadataQuery = metadataQuery if metadataQuery is not None else []  # List of MetadataQueryHandler
+        self.processQuery = processQuery if processQuery is not None else []     # List of ProcessorDataQueryHandler
 
-    def cleanMetadataHandlers(self):
-        self.metadataQuery = []
+    def cleanMetadataHandlers(self) -> bool:
+        """Clear the list of metadataQuery handlers."""
+        self.metadataQuery.clear()
+        return True
 
-    def cleanProcessHandlers(self):
-        self.processQuery = []
+    def cleanProcessHandlers(self) -> bool:
+        """Clear the list of processQuery handlers."""
+        self.processQuery.clear()
+        return True
 
-    def addMetadataHandler(self, handler: MetadataQueryHandler):
-        self.metadataQuery.append(handler)
+    def addMetadataHandler(self, handler) -> bool:
+        """Add a MetadataQueryHandler object to the metadataQuery list."""
+        if handler not in self.metadataQuery:
+            self.metadataQuery.append(handler)
+            return True
+        return False
 
-    def addProcessHandler(self, handler: ProcessDataQueryHandler):
-        self.processQuery.append(handler)
-
+    def addProcessHandler(self, handler) -> bool:
+        """Add a ProcessorDataQueryHandler object to the processQuery list."""
+        if handler not in self.processQuery:
+            self.processQuery.append(handler)
+            return True
+        return False
+    
     def _createEntityObject(self, entity_data: dict) -> IdentifiableEntity:
         # Assuming 'type' is a key in entity_data that indicates the specific subclass
         entity_type = entity_data.get('type', None)
