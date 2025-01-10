@@ -121,5 +121,5 @@ base_url = "http://example.org/"
 meta_file_path = "data/meta.csv"  # Replace with the actual path of your CSV file
 
 handler = MetadataUploadHandler()  # Create an instance of MetadataUploadHandler
-handler.dbPathOrUrl = "http://10.201.81.71:9999/blazegraph/sparql"  # Define Blazegraph endpoint
+handler.dbPathOrUrl = "http://10.201.7.18:9999/blazegraph/sparql"  # Define Blazegraph endpoint
 handler.pushDataToDb(meta_file_path)  # Push data from the CSV file to the database
