@@ -45,7 +45,7 @@ class ProcessDataQueryHandler(QueryHandler):
                     # partial match
                     elif partialName.lower() in item.lower():
                         institution_df = activities.query("`responsible institute` == @item")
-    
+                
         return institution_df
     
     def getActivitiesByResponsiblePerson(self, partialName):
