@@ -120,7 +120,7 @@ class ProcessDataUploadHandler(UploadHandler):
             tools_dict = dict()
             for idx, row in multi_valued_df.iterrows():
                 # populate dictionary with unique identifiers as keys and lists of tools as values
-                tools_dict[row[0]] = row[1] # replace with iloc
+                tools_dict[row.iloc[0]] = row.iloc[1] # iloc to access values by position
 
             print(tools_dict)
 
