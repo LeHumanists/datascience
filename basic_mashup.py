@@ -3,12 +3,17 @@ from process_data_query_handler import ProcessDataQueryHandler
 from identifiable_entity import IdentifiableEntity
 from graph_class import CulturalHeritageObject, Author, NauticalChart, ManuscriptPlate, ManuscriptVolume, PrintedVolume, PrintedMaterial, Herbarium, Specimen, Painting, Model, Map
 from person import Person
-from activity import Activity
+from activity import Activity, Acquisition, Processing, Modelling, Optimising, Exporting
 import pandas as pd
 from pandas import DataFrame
 from pandas import Series
+from pandas import concat
+from pandas import merge
+from sqlite3 import connect
+from sqlite3 import read_sql
 import json  # Importazione del modulo standard json
 from typing import List, Optional
+import re
 
 class BasicMashup:
     def __init__(self, metadataQuery=None, processQuery=None):
@@ -149,3 +154,132 @@ class BasicMashup:
                 except Exception as e:
                     print(f"Error during merging or processing of DataFrames: {e}")
         return cho_list 
+
+    # methods for relational db start here
+        
+
+    def getAllActivities(self):
+        if self.processQuery:
+            activities_df_list = [process_qh.getAllActivities() for process_qh in self.processQuery]
+            
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+                tools_df_sql = read_sql(query, con)
+
+        # now iterate over the list of dataframes and merge them into one before appending the objects to the result list
+            concat_df = concat(activities_df_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
+            merged_df = merge(concat_df_cleaned, tools_df_sql, left_on="unique_id", right_on="unique_id")
+        
+        else:
+            print("No processQueryHandler found")
+        
+        return instantiateClass(merged_df)
+        
+
+    def getActivitiesByResponsibleInstitution(self, partialName):
+        if self.processQuery:
+            act_by_inst_df_list = [process_qh.getActivitiesByResponsibleInstitution(partialName) for process_qh in self.processQuery]
+
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+                tools_df_sql = read_sql(query, con)
+
+            concat_df = concat(act_by_inst_df_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
+            merged_df = merge(concat_df_cleaned, tools_df_sql, left_on="unique_id", right_on="unique_id")
+        
+        else:
+            print("No processQueryHandler found")
+        
+        return instantiateClass(merged_df)
+    
+
+    def getActivitiesByResponsiblePerson(self, partialName):
+        if self.processQuery:
+            act_by_pers_df_list = [process_qh.getActivitiesByResponsiblePerson(partialName) for process_qh in self.processQuery]
+    
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+                tools_df_sql = read_sql(query, con)
+
+            concat_df = concat(act_by_pers_df_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
+            merged_df = merge(concat_df_cleaned, tools_df_sql, left_on="unique_id", right_on="unique_id")
+
+        else:
+            print("No processQueryHandler found")
+
+        return instantiateClass(merged_df)
+    
+
+    def getActivitiesStartedAfter(self, date):
+        if self.processQuery:
+            act_start_aft_list = [process_qh.getActivitiesStartedAfter(date) for process_qh in self.processQuery]
+        
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+                tools_df_sql = read_sql(query, con)
+
+            concat_df = concat(act_start_aft_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
+            merged_df = merge(concat_df_cleaned, tools_df_sql, left_on="unique_id", right_on="unique_id")
+
+        else:
+            print("No processQueryHandler found")
+
+        return instantiateClass(merged_df)
+    
+
+    def getActivitiesEndedBefore(self, date):
+        if self.processQuery:
+            act_end_before_list = [process_qh.getActivitiesStartedAfter(date) for process_qh in self.processQuery]
+        
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+                tools_df_sql = read_sql(query, con)
+
+            concat_df = concat(act_end_before_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
+            merged_df = merge(concat_df_cleaned, tools_df_sql, left_on="unique_id", right_on="unique_id")
+
+        else:
+            print("No processQueryHandler found")
+
+        return instantiateClass(merged_df)
+
+
+
+def instantiateClass(activity_df):
+    activity_list = []
+    activity_mapping = {
+        "acquisition": Acquisition,
+        "processing": Processing,
+        "modelling": Modelling,
+        "optimising": Optimising,
+        "exporting": Exporting
+    }
+        
+    with connect("relational.db") as con:
+        query = "SELECT * FROM Tools"
+        tools_df_sql = read_sql(query, con)
+
+    if len(tools_df_sql) > len(activity_df):
+        for tools_idx, tools_row in tools_df_sql.iterrows():
+            for act_idx, act_row in activity_df.iterrows():
+                if tools_row["unique_id"] != act_row["unique_id"]:
+                    tools_df_sql.drop(tools_idx)
+    
+    merged_df = merge(activity_df, tools_df_sql, left_on="unique_id", right_on="unique_id")
+
+    for idx, row in merged_df.iterrows():
+        activity_from_id = re.sub("_\d+", "", row["unique_id"])
+        if activity_from_id in activity_mapping.keys() and activity_from_id == "acquisition":
+            activity_obj = Acquisition(row["responsible institute"], row["responsible person"], row["technique"], row["tool"], row["start date"], row["end date"], row["refers_to"])
+            activity_list.append(activity_obj)
+        elif activity_from_id in activity_mapping.keys() and activity_from_id != "acquisition":
+            class_to_use = activity_mapping.get(activity_from_id)
+            activity_obj = class_to_use(row["responsible institute"], row["responsible person"], row["tool"], row["start date"], row["end date"], row["refers_to"])
+            activity_list.append(activity_obj)
+    
+    return activity_list
