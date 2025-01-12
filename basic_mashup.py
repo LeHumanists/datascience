@@ -156,97 +156,70 @@ class BasicMashup:
         return cho_list 
 
     # methods for relational db start here
-        
-
+    
     def getAllActivities(self):
         if self.processQuery:
             activities_df_list = [process_qh.getAllActivities() for process_qh in self.processQuery]
-            
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-                tools_df_sql = read_sql(query, con)
 
-        # now iterate over the list of dataframes and merge them into one before appending the objects to the result list
             concat_df = concat(activities_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-            merged_df = merge(concat_df_cleaned, tools_df_sql, left_on="unique_id", right_on="unique_id")
         
         else:
             print("No processQueryHandler found")
         
-        return instantiateClass(merged_df)
+        return instantiateClass(concat_df_cleaned)
         
 
     def getActivitiesByResponsibleInstitution(self, partialName):
         if self.processQuery:
             act_by_inst_df_list = [process_qh.getActivitiesByResponsibleInstitution(partialName) for process_qh in self.processQuery]
 
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-                tools_df_sql = read_sql(query, con)
-
             concat_df = concat(act_by_inst_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-            merged_df = merge(concat_df_cleaned, tools_df_sql, left_on="unique_id", right_on="unique_id")
         
         else:
             print("No processQueryHandler found")
         
-        return instantiateClass(merged_df)
+        return instantiateClass(concat_df_cleaned)
     
 
     def getActivitiesByResponsiblePerson(self, partialName):
         if self.processQuery:
             act_by_pers_df_list = [process_qh.getActivitiesByResponsiblePerson(partialName) for process_qh in self.processQuery]
-    
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-                tools_df_sql = read_sql(query, con)
 
             concat_df = concat(act_by_pers_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-            merged_df = merge(concat_df_cleaned, tools_df_sql, left_on="unique_id", right_on="unique_id")
 
         else:
             print("No processQueryHandler found")
 
-        return instantiateClass(merged_df)
+        return instantiateClass(concat_df_cleaned)
     
 
     def getActivitiesStartedAfter(self, date):
         if self.processQuery:
             act_start_aft_list = [process_qh.getActivitiesStartedAfter(date) for process_qh in self.processQuery]
-        
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-                tools_df_sql = read_sql(query, con)
 
             concat_df = concat(act_start_aft_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-            merged_df = merge(concat_df_cleaned, tools_df_sql, left_on="unique_id", right_on="unique_id")
 
         else:
             print("No processQueryHandler found")
 
-        return instantiateClass(merged_df)
+        return instantiateClass(concat_df_cleaned)
     
 
     def getActivitiesEndedBefore(self, date):
         if self.processQuery:
             act_end_before_list = [process_qh.getActivitiesStartedAfter(date) for process_qh in self.processQuery]
-        
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-                tools_df_sql = read_sql(query, con)
 
             concat_df = concat(act_end_before_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-            merged_df = merge(concat_df_cleaned, tools_df_sql, left_on="unique_id", right_on="unique_id")
 
         else:
             print("No processQueryHandler found")
 
-        return instantiateClass(merged_df)
+        return instantiateClass(concat_df_cleaned)
 
 
 
