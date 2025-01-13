@@ -220,6 +220,19 @@ class BasicMashup:
             print("No processQueryHandler found")
 
         return instantiateClass(concat_df_cleaned)
+    
+
+    def getAcquisitionsByTechnique(self, inputtechnique)
+        if self.processQuery:
+            act_by_technique_df_list = [process_qh.getAcquisitionsByTechnique(inputtechnique) for process_qh in self.processQuery]
+
+            concat_df = concat(act_by_technique_df_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
+
+        else:
+            print("No processQueryHandler found")
+
+        return instantiateClass(concat_df_cleaned)
 
 
 

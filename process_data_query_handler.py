@@ -89,7 +89,7 @@ class ProcessDataQueryHandler(QueryHandler):
         return end_date_df
 
     
-    def getAcquisitionByTechnique(self, inputtechnique):
+    def getAcquisitionsByTechnique(self, inputtechnique):
         technique_df = DataFrame()
         for idx, row in acquisition_sql_df.iterrows():
             for column_name, technique in row.items():
