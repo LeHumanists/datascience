@@ -10,7 +10,7 @@ from pandas import Series
 from pandas import concat
 from pandas import merge
 from sqlite3 import connect
-from sqlite3 import read_sql
+from pandas import read_sql
 import json  # Importazione del modulo standard json
 from typing import List, Optional
 import re
@@ -222,7 +222,7 @@ class BasicMashup:
         return instantiateClass(concat_df_cleaned)
     
 
-    def getAcquisitionsByTechnique(self, inputtechnique)
+    def getAcquisitionsByTechnique(self, inputtechnique):
         if self.processQuery:
             act_by_technique_df_list = [process_qh.getAcquisitionsByTechnique(inputtechnique) for process_qh in self.processQuery]
 
@@ -234,7 +234,8 @@ class BasicMashup:
 
         return instantiateClass(concat_df_cleaned)
 
-
+    def getActivitiesUsingTool(self, tool):
+        pass
 
 def instantiateClass(activity_df):
     activity_list = []
@@ -259,7 +260,7 @@ def instantiateClass(activity_df):
     merged_df = merge(activity_df, tools_df_sql, left_on="unique_id", right_on="unique_id")
 
     for idx, row in merged_df.iterrows():
-        activity_from_id = re.sub("_\d+", "", row["unique_id"])
+        activity_from_id = re.sub("_\\d+", "", row["unique_id"])
         if activity_from_id in activity_mapping.keys() and activity_from_id == "acquisition":
             activity_obj = Acquisition(row["responsible institute"], row["responsible person"], row["technique"], row["tool"], row["start date"], row["end date"], row["refers_to"])
             activity_list.append(activity_obj)
