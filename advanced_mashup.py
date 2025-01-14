@@ -27,3 +27,35 @@ class AdvancedMashup(BasicMashup):
         
         return activities 
     
+
+    def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:
+        objects_list = []
+  
+    # Check if partialName or the queries are empty
+        if not partialName or not self.processQuery or not self.metadataQuery:
+            return objects_list  # Return an empty list
+        else:
+    # Get the activities of the responsible person with a partial name match
+            activities = self.getActivitiesByResponsiblePerson(partialName)
+      
+    # Get all cultural heritage objects
+            object_list = self.getAllCulturalHeritageObjects()
+      
+    # Create an empty list for object IDs
+            object_ids_list = []
+      
+    # Iterate over the activities to extract object IDs
+        for activity in activities:
+        # Extract the ID from the referenced object
+           object_id = activity.refersTo_cho.id
+        # Add the ID to the object_ids list if it's not already there
+           if object_id not in object_ids_list:
+               object_ids_list.append(object_id)
+      
+       # Add the objects to the list, avoiding duplicates
+        for cho in object_list:
+           # If the object's ID is in object_ids, add it to the result list
+           if cho.id in object_ids_list and cho not in objects_list:
+               objects_list.append(cho)
+  
+        return objects_list   
