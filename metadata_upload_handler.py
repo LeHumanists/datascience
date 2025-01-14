@@ -75,7 +75,7 @@ class MetadataUploadHandler(UploadHandler):
             
             # Additional fields like date, owner, place, etc.
             if pd.notna(row.get("Date")):
-                self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.date)))
+                self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.string)))
             if pd.notna(row.get("Owner")):
                 self.my_graph.add((subj, FOAF.maker, Literal(row["Owner"].strip())))
             if pd.notna(row.get("Place")):
@@ -97,7 +97,7 @@ class MetadataUploadHandler(UploadHandler):
                     person_id = URIRef(f"http://example.org/person/{author_string.replace(' ', '_')}")
                 
                 # Add the author information to the graph
-                self.my_graph.add((subj, DCTERMS.creator, person_id))
+                self.my_graph.add((person_id, DCTERMS.creator, subj))
                 self.my_graph.add((person_id, FOAF.name, Literal(author_string, datatype=XSD.string)))
         
         # Uploading data to Blazegraph after processing all rows
