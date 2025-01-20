@@ -84,7 +84,7 @@ class ProcessDataQueryHandler(QueryHandler):
         for idx, row in activities.iterrows():
             for column_name, item in row.items():
                 if column_name == "end date":
-                     end_date_df = activities.query("`end date` <= @date and `end date` != ''")
+    end_date_df = activities.query("`end date` <= @date and `end date` != ''")
         
         return end_date_df
 
