@@ -1,4 +1,4 @@
-class Handler:
+class Handler(object):
     def __init__(self, dbPathOrUrl):
         self.dbPathOrUrl = dbPathOrUrl
     
