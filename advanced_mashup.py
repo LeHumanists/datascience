@@ -1,3 +1,7 @@
+import pandas as pd
+from sqlite3 import connect
+from pandas import read_sql
+from pandas import merge
 from metadata_query_handler import MetadataQueryHandler
 from process_data_query_handler import ProcessDataQueryHandler
 from identifiable_entity import IdentifiableEntity
@@ -5,6 +9,7 @@ from graph_class import CulturalHeritageObject, Author, NauticalChart, Manuscrip
 from person import Person
 from activity import Activity, Acquisition, Processing, Modelling, Optimising, Exporting
 from basic_mashup import BasicMashup
+from sparql_dataframe import get
 
 class AdvancedMashup(BasicMashup):
     
@@ -43,11 +48,11 @@ class AdvancedMashup(BasicMashup):
         return activities
     
     def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:
-        objects_list = []
+        cultural_objects_list = []
 
         # Check if partialName or the queries are empty
         if not partialName or not self.processQuery or not self.metadataQuery:
-            return objects_list  # Return an empty list
+            return cultural_objects_list  # Return an empty list
         else:
             # Get the activities of the responsible person with a partial name match
             activities = self.getActivitiesByResponsiblePerson(partialName)
@@ -69,7 +74,60 @@ class AdvancedMashup(BasicMashup):
         # Add the objects to the list, avoiding duplicates
         for cho in object_list:
             # If the object's ID is in object_ids, add it to the result list
-            if cho.id in object_ids_list and cho not in objects_list:
-                objects_list.append(cho)
+            if cho.id in object_ids_list and cho not in cultural_objects_list:
+                cultural_objects_list.append(cho)
     
-        return objects_list
+        return cultural_objects_list
+    
+    def getAuthorsOfObjectsAcquiredInTimeFrame(self, start, end): # returns a list of objects of the class person
+        query_result = []
+
+        # sparql query
+        endpoint = "http://10.201.7.18:9999/blazegraph/sparql"
+        sparql_query = """
+        PREFIX dcterms: <http://purl.org/dc/terms>
+
+        SELECT ?object ?author ?name
+        WHERE {
+            ?author dcterms:creator ?object .
+            ?author foaf:name ?name
+        }
+        """
+
+        authors_cho_df = get(endpoint, sparql_query, True)
+        print("Authors and objects dataframe\n:", authors_cho_df)
+
+         # associate id to each object uri
+        objects_id = []
+        slug = ""
+       
+        for _, row in authors_cho_df.iterrows():
+            slug = row["object"].split()[-1]
+            objects_id.append("object_" + slug)
+
+        authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
+        print("dataframe with ids\n:", authors_cho_df)
+        
+        # sql query
+        with connect("relational.db") as con:
+            sql_query = "SELECT start date, end date, refers_to FROM Acquisition" # check if it requires backticks for space separated column names
+            acq_timeframe_df = read_sql(sql_query, con)
+        
+        # merge resulting dataframes
+        merged = merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to")
+        print("Merged dataframe\n:", merged)
+
+        # check for matching values in the merged df
+        # exclude empty values
+        if (not merged["start date"].isna()) & (merged["end date"] != ""):
+            result_df = merged[(merged["start date"] >= start) & merged("end date") <= end]
+
+        # extend the empty list with the objects of the class person compliant with the query
+        query_result = query_result.extend([Person(author) for author in result_df["name"]])
+        
+        return query_result
+
+
+        
+
+

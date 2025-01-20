@@ -100,41 +100,37 @@ class BasicMashup:
         return person_list
     
     def getAllCulturalHeritageObjects(self):
-   # Retrieve list of handlers from self.metadataQuery in which there is information about cultural heritage objects.      
+       # Retrieve list of handlers from self.metadataQuery in which there is information about cultural heritage objects.      
        handler_list = self.metadataQuery
-   # Empty list to collect the DataFrames returned by handlers
+       # Empty list to collect the DataFrames returned by handlers
        df_list = []
-   # Empty list that contains the cultural heritage objects created by the function
+       # Empty list that contains the cultural heritage objects created by the function
        obj_result_list = []
-
-
-   # Iterate over each handler
+       
+       # Iterate over each handler
        for handler in handler_list:
-       # Get the DataFrame of objects from the handler
+           # Get the DataFrame of objects from the handler
            df_objects = handler.getAllCulturalHeritageObjects()
 
-
-       # Combine authors with objects
+           # Combine authors with objects
            df_object_update = self.combineAuthorsOfObjects(df_objects, handler)
-      
-       # Add the DataFrame to the list
+
+           # Add the DataFrame to the list
            df_list.append(df_object_update)
-
-
-   # Concatenate all DataFrames, remove duplicates, and handle null values
+           
+        # Concatenate all DataFrames, remove duplicates, and handle null values
        df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
-
-
-   # Iterate over each row of the concatenated DataFrame
+       
+       # Iterate over each row of the concatenated DataFrame
        for _, row in df_union.iterrows():
            obj_type = row['type']
-  
-       # Check if the object type is in the type_mapping dictionary
+           
+           # Check if the object type is in the type_mapping dictionary
            if obj_type in type_mapping:
-           # Get the object class constructor from the mapping
+               # Get the object class constructor from the mapping
                object_class = type_mapping[obj_type]
-      
-           # Create the object using the dynamic constructor and row data
+               
+               # Create the object using the dynamic constructor and row data
                object = object_class(
                    id=str(row["id"]),
                    title=row['title'],
@@ -143,101 +139,111 @@ class BasicMashup:
                    place=row['place'],
                    authors=row['Authors']
                )
-      
-           # Add the object to the result list
+               
+               # Add the object to the result list
                obj_result_list.append(object)
-
+           else:
+                # Handle the case where the type is not mapped
+                print(f"Warning: Unknown object type: {obj_type}")
 
            return obj_result_list
 
   
     def getAuthorsOfCulturalHeritageObject(self, id: str):
-    # Check if there are any available handlers
+        # Check if there are any available handlers
         if not self.metadataQuery:
             return []  # Return an empty list if there are no handlers available
-    
-    # List to store valid DataFrames retrieved from each handler
+        
+        # List to store valid DataFrames retrieved from each handler
         df_list = []
-
-    # Iterate through the handlers to collect author data
+        
+        # Iterate through the handlers to collect author data
         for handler in self.metadataQuery:
             try:
-            # Retrieve the authors' data for the given object ID from the handler
+                # Retrieve the authors' data for the given object ID from the handler
                 df = handler.getAuthorsOfCulturalHeritageObject(id)
-            # If the DataFrame is not empty, add it to the list
+                
+                # If the DataFrame is not empty, add it to the list
                 if not df.empty:
                     df_list.append(df)
             except Exception as e:
-            # Print an error message if an exception occurs when retrieving data from the handler
+                # Print an error message if an exception occurs when retrieving data from the handler
                 print(f"Error retrieving authors from handler {handler}: {e}")
-
-    # If there are no valid DataFrames, return an empty list
+                
+        # If there are no valid DataFrames, return an empty list
         if not df_list:
             return []
-
-    # Concatenate the DataFrames, remove duplicates, and handle NaN values
+        
+        # Concatenate the DataFrames, remove duplicates, and handle NaN values
         df_union = pd.concat(df_list, ignore_index=True).drop_duplicates(subset=["authorId"]).fillna("")
-
-    # List of authors (avoid empty or invalid authors)
+        
+        # List of authors (avoid empty or invalid authors)
         author_result_list = []
         for _, row in df_union.iterrows():
-        # Strip leading and trailing whitespace from the author's name
+            # Strip leading and trailing whitespace from the author's name
             author = row['authorName'].strip()
-        # If the author name is empty, return None
+            # If the author name is empty, return None
             if author == "":
                 return None
             else:
-            # Create a Person object for the author using their ID and name
+                # Create a Person object for the author using their ID and name
                 person = Person(id=str(row["authorId"]), name=author)
-            # Append the Person object to the result list
+                # Append the Person object to the result list
                 author_result_list.append(person)
-
-    # Return the list of author objects
+                
+        # Return the list of author objects
         return author_result_list
     
     
-    def getCulturalHeritageObjectsAuthoredBy(self, authorId: str):       
-        object_result_list = []  # List to collect the final cultural heritage objects
-    
-    # Check if there are any handlers to query
-        if not self.metadataQuery:  # If self.metadataQuery is empty or None
-            return object_result_list  # Return an empty list
-
-        df_list = []  # List to collect DataFrames to be merged
-
-    # Collect dataframes from all handlers
-        for handler in self.metadataQuery:  # Iterate over each handler in self.metadataQuery
+    def getCulturalHeritageObjectsAuthoredBy(self, authorId: str): 
+        # List to collect the final cultural heritage objects      
+        object_result_list = [] 
+        
+        # Check if there are any handlers to query, if self.metadataQuery is empty or None
+        if not self.metadataQuery: 
+            # Return an empty list
+            return object_result_list 
+        
+        # List to collect DataFrames to be merged
+        df_list = [] 
+        
+        # Iterate over each handler in self.metadataQuery
+        for handler in self.metadataQuery:  
             try:
-            # Retrieve cultural heritage objects authored by the given author
+                # Retrieve cultural heritage objects authored by the given author
                 df_objects = handler.getCulturalHeritageObjectsAuthoredBy(authorId)  
-            
-                if not df_objects.empty:  # If the DataFrame is not empty
-                # Combine author data with cultural heritage objects
+                
+                # If the DataFrame is not empty
+                if not df_objects.empty:  
+                    # Combine author data with cultural heritage objects
                     df_object_update = self.combineAuthorsOfObjects(df_objects, handler)  
-                # Add the processed DataFrame to the df_list
+                    
+                    # Add the processed DataFrame to the df_list
                     df_list.append(df_object_update)  
+            
             except Exception as e:  # Handle exceptions in case of errors during data retrieval
-            # Print an error if something goes wrong during processing
+                # Print an error if something goes wrong during processing
                 print(f"Error processing handler {handler}: {e}")  
-
-    # Concatenate all dataframes into one and clean it
+                
+        # Concatenate all dataframes into one and clean it
         if not df_list:  # If df_list is empty
-            return df_list  # Return an empty list
-
-        if df_list:  # If df_list is not empty
-        # Merge all DataFrames into a single one, remove duplicates, and handle NaN values
+            return df_list  # Return df_list as empty list
+        
+        # If df_list is not empty
+        if df_list:
+            # Merge all DataFrames into a single one, remove duplicates, and handle NaN values
             df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
-
-        # Iterate through the concatenated dataframe
-            for _, row in df_union.iterrows():  # Iterate through each row of the merged DataFrame
+            
+            # Iterate through each row of the merged DataFrame
+            for _, row in df_union.iterrows(): 
                 obj_type = row['type']  # Extract the object type from the 'type' column
-
-            # Check if obj_type is in type_mapping
-                if obj_type in type_mapping:  # If the object type is present in type_mapping'
-                # Get the corresponding class constructor for the object type
-                    object_class = type_mapping[obj_type]  # Get the class associated with the object type
-
-                # Create the object using the corresponding class constructor
+                
+                # Check if obj_type is in type_mapping
+                if obj_type in type_mapping: 
+                    # Get the class associated with the object type
+                    object_class = type_mapping[obj_type]  
+                    
+                    # Create the object using the corresponding class constructor
                     object = object_class(  # Create the cultural heritage object using the corresponding class
                         id=str(row["id"]),  # Pass the object ID
                         title=row['title'],  # Pass the object title
@@ -246,13 +252,14 @@ class BasicMashup:
                         place=row['place'],  # Pass the object place
                         authors=row['Authors']  # Pass the authors associated with the object
                     )
-                # Add the created object to the result list
+                    # Add the created object to the result list
                     object_result_list.append(object)
                 else:
-                # If the object type is not present in type_mapping
-                    print(f"Warning: Unrecognized object type: {obj_type}")  # Print a warning
+                    # If the object type is not present in type_mapping print a warning
+                    print(f"Warning: Unrecognized object type: {obj_type}")  
 
         return object_result_list  # Return the list of created objects
+    
 
     # methods for relational db start here
     
@@ -367,7 +374,7 @@ def instantiateClass(activity_df):
                 if tools_row["unique_id"] != act_row["unique_id"]:
                     tools_df_sql.drop(tools_idx)
     
-    merged_df = merge(activity_df, tools_df_sql, left_on="unique_id", right_on="unique_id")
+    merged_df = merge(activity_df, tools_df_sql, left_on="unique_id", right_on="unique_id") # possibili problemi qui (controllare anche processdataquery per lo stesso motivo)
 
     for idx, row in merged_df.iterrows():
         activity_from_id = re.sub("_\\d+", "", row["unique_id"])
