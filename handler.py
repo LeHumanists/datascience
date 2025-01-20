@@ -1,6 +1,6 @@
 class Handler:
-    def __init__(self):
-        self.dbPathOrUrl = ""
+    def __init__(self, dbPathOrUrl):
+        self.dbPathOrUrl = dbPathOrUrl
     
     def getDbPathOrUrl(self):
         return self.dbPathOrUrl
