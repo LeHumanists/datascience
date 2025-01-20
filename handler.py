@@ -7,6 +7,8 @@ class Handler(object):
     
     def setDbPathOrUrl(self, url):
         self.dbPathOrUrl = url
+        return True  # Return True to indicate success
+
 
 class UploadHandler(Handler):
     pass
