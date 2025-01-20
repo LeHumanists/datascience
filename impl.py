@@ -851,7 +851,7 @@ def instantiateClass(activity_df):
                 if tools_row["unique_id"] != act_row["unique_id"]:
                     tools_df_sql.drop(tools_idx)
     
-    merged_df = merge(activity_df, tools_df_sql, left_on="unique_id", right_on="unique_id")
+    merged_df = pd.merge(activity_df, tools_df_sql, left_on="unique_id", right_on="unique_id")
 
     for idx, row in merged_df.iterrows():
         activity_from_id = re.sub("_\\d+", "", row["unique_id"])
