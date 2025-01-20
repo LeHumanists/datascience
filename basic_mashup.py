@@ -100,55 +100,58 @@ class BasicMashup:
         return person_list
     
     def getAllCulturalHeritageObjects(self):
-       # Retrieve list of handlers from self.metadataQuery in which there is information about cultural heritage objects.      
-       handler_list = self.metadataQuery
-       # Empty list to collect the DataFrames returned by handlers
-       df_list = []
-       # Empty list that contains the cultural heritage objects created by the function
-       obj_result_list = []
-       
-       # Iterate over each handler
-       for handler in handler_list:
-           # Get the DataFrame of objects from the handler
-           df_objects = handler.getAllCulturalHeritageObjects()
+        # Retrieve list of handlers from self.metadataQuery in which there is information about cultural heritage objects.      
+        handler_list = self.metadataQuery
+        # Empty list to collect the DataFrames returned by handlers
+        df_list = []
+        # Empty list that contains the cultural heritage objects created by the function
+        obj_result_list = []
+    
+        # Iterate over each handler
+        for handler in handler_list:
+            # Get the DataFrame of objects from the handler
+            df_objects = handler.getAllCulturalHeritageObjects()
 
-           # Combine authors with objects
-           df_object_update = self.combineAuthorsOfObjects(df_objects, handler)
+            # Combine authors with objects
+            df_object_update = self.combineAuthorsOfObjects(df_objects, handler)
 
-           # Add the DataFrame to the list
-           df_list.append(df_object_update)
-           
+            # Add the DataFrame to the list
+            df_list.append(df_object_update)
+        
         # Concatenate all DataFrames, remove duplicates, and handle null values
-       df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
-       
-       # Iterate over each row of the concatenated DataFrame
-       for _, row in df_union.iterrows():
-           obj_type = row['type']
-           
-           # Check if the object type is in the type_mapping dictionary
-           if obj_type in type_mapping:
-               # Get the object class constructor from the mapping
-               object_class = type_mapping[obj_type]
-               
-               # Create the object using the dynamic constructor and row data
-               object = object_class(
-                   id=str(row["id"]),
-                   title=row['title'],
-                   date=str(row['date']),
-                   owner=row['owner'],
-                   place=row['place'],
-                   authors=row['Authors']
-               )
-               
-               # Add the object to the result list
-               obj_result_list.append(object)
-           else:
+        df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
+    
+        # Iterate over each row of the concatenated DataFrame
+        for _, row in df_union.iterrows():
+            obj_type = row['type']
+        
+            # Check if the object type is in the type_mapping dictionary
+            if obj_type in type_mapping:
+                # Get the object class constructor from the mapping
+                object_class = type_mapping[obj_type]
+            
+                # Create the object using the dynamic constructor and row data
+                object = object_class(
+                    id=str(row["id"]),
+                    title=row['title'],
+                    date=str(row['date']),
+                    owner=row['owner'],
+                    place=row['place'],
+                    authors=row['Authors']
+                )
+            
+                # Add the object to the result list
+                obj_result_list.append(object)
+            else:
                 # Handle the case where the type is not mapped
-                print(f"Warning: No object type: {obj_type} found")
-                
-                return obj_result_list
+                print(f"Warning: No object type: {obj_type} found.")
+            
+                # Continue to the next row without interrupting the process
+                continue
 
-  
+        return obj_result_list
+
+
     def getAuthorsOfCulturalHeritageObject(self, id: str):
         # Check if there are any available handlers
         if not self.metadataQuery:
@@ -244,6 +247,9 @@ class BasicMashup:
             else:
                 # If the object type is not present in type_mapping print a warning
                 print(f"Warning: No object type: {obj_type} found")  
+                
+                # Continue to the next row without interrupting the process
+                continue
 
         return object_result_list  # Return the list of created objects
     
