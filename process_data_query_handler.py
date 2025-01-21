@@ -119,3 +119,22 @@ class ProcessDataQueryHandler(QueryHandler):
                          activities_tool = activities.query("`tool` == @tool")
     
         return activities_tool
+
+
+    def getActivitiesUsingTool(self, tool):
+        # Merge  the activities DataFrame  with the tool DataFrame
+        activities_with_tool = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
+    
+        # Normalize the tool string for comparison
+        tool_lower = tool.lower()
+    
+        # Filter rows where the tool column matches the exact or partial tool name
+        activities_tool = activities_with_tool[
+            activities_with_tool['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)
+        ]
+    
+        return activities_tool
+        
+    
+ 
+   
