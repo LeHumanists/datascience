@@ -33,8 +33,9 @@ class ProcessDataQueryHandler(QueryHandler):
         activities = concat([dfs["Acquisition"], dfs["Processing"], dfs["Modelling"], dfs["Optimising"], dfs["Exporting"]], ignore_index=True)
         activities = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
 
-        acquisition_sql_df = merge(acquisition_sql_df, tool_sql_df, left_on="unique_id", right_on="unique_id")
-        print(type(activities))  # Debugging
+        acquisition_sql_df = merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
+        print("Activities type:", type(activities))  # Debugging
+        print("Acquisition type:", type(acquisition_sql_df))  # Debugging
         return activities, acquisition_sql_df
 
 
