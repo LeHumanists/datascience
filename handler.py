@@ -16,3 +16,5 @@ class UploadHandler(Handler):
     def pushDataToDb(self, file_path) -> bool:
         # return True if data is uploaded to the db
         pass
+    
+    

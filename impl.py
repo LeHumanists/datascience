@@ -169,26 +169,24 @@ class Exporting(Activity):
     pass
 
 class Handler(object):
-    def __init__(self, dbPathOrUrl: str = ""):
+    def __init__(self, dbPathOrUrl=""):
+        # Initialize the database path or URL
         self.dbPathOrUrl = dbPathOrUrl
 
     def getDbPathOrUrl(self):
+        # Return the configured database path or URL
         return self.dbPathOrUrl
 
     def setDbPathOrUrl(self, url):
+        # Set the database path or URL
         self.dbPathOrUrl = url
-        return True # Return True to indicate success
+        return True  # Indicate success
+
 
 class UploadHandler(Handler):
-    def __init__(self):
-        super().__init__()  # Initialize any base attributes if needed
-
-    def pushDataToDb(self, file_path: str):
-        """
-        Abstract method to upload data to the database.
-        This is intended to be overridden in subclasses.
-        """
-        pass  # No implementation here; subclasses provide their own logic
+    def pushDataToDb(self, file_path):
+        # Placeholder for data upload logic, to be implemented by subclasses
+        raise NotImplementedError("Subclasses must implement 'pushDataToDb'.")
     
 class ResourceURIs:
     NauticalChart = URIRef("https://dbpedia.org/resource/Nautical_chart")
@@ -211,7 +209,7 @@ class MetadataUploadHandler(UploadHandler):
         self.my_graph.bind("example", self.example)
         self.my_graph.bind("schema", self.schema)
 
-        # Mapeamento de tipos como atributo da classe
+        # Mapping types to URIs
         self.type_mapping = {
             "Nautical chart": ResourceURIs.NauticalChart,
             "Manuscript plate": ResourceURIs.ManuscriptPlate,
@@ -237,7 +235,6 @@ class MetadataUploadHandler(UploadHandler):
             # Load the CSV file into a DataFrame
             df = pd.read_csv(file_path)
 
-            # Ensure the DataFrame is not empty
             if df.empty:
                 print("Error: The CSV file is empty or improperly formatted.")
                 return False
@@ -258,15 +255,13 @@ class MetadataUploadHandler(UploadHandler):
         subj = URIRef(self.example + str(row["Id"]))
         self.my_graph.add((subj, DCTERMS.identifier, Literal(row["Id"])))
 
-        # Use o type_mapping como um atributo da classe
         if row.get("Type", "").strip() in self.type_mapping:
             self.my_graph.add((subj, RDF.type, self.type_mapping[row["Type"].strip()]))
 
-        # Add additional properties
         if pd.notna(row.get("Title")):
             self.my_graph.add((subj, DCTERMS.title, Literal(row["Title"].strip())))
         if pd.notna(row.get("Date")):
-            self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.str)))
+            self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.date)))
         if pd.notna(row.get("Owner")):
             self.my_graph.add((subj, FOAF.maker, Literal(row["Owner"].strip())))
         if pd.notna(row.get("Place")):
@@ -274,6 +269,14 @@ class MetadataUploadHandler(UploadHandler):
 
     def _uploadGraphToBlazegraph(self) -> bool:
         """Uploads the RDF graph to Blazegraph."""
+        if not self.dbPathOrUrl:
+            print("Error: SPARQL endpoint is not set. Use setDbPathOrUrl to configure it.")
+            return False
+
+        if len(self.my_graph) == 0:
+            print("Error: RDF graph is empty. No data to upload.")
+            return False
+
         try:
             store = SPARQLUpdateStore()
             store.open((self.dbPathOrUrl, self.dbPathOrUrl))
@@ -493,27 +496,27 @@ class QueryHandler(Handler):
                 f"Error executing SPARQL query on {self.dbPathOrUrl}:\nQuery: {query}\nError: {e}"
             )
             return pd.DataFrame()
-        
+
 class MetadataQueryHandler(QueryHandler):
-    def __init__(self, db_url=""):
-        """Initialize a class with the URL of the database."""
-        self.db_url = db_url
+    def __init__(self):
+        # Inicializa a classe base sem um endpoint inicialmente
+        super().__init__()
 
-    def execute_query(self, query, variables=None):
-        """Execute a SPARQL query with optional variable substitution."""
+    def execute_query(self, query: str) -> pd.DataFrame:
+        """
+        Execute a SPARQL query and return the result as a DataFrame.
+        """
+        if not self.dbPathOrUrl:
+            logging.error("SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
+            return pd.DataFrame()
+
         try:
-            sparql = SPARQLWrapper(self.db_url)
-
-            # If variables are provided, substitute them into the query
-            if variables:
-                for key, value in variables.items():
-                    query = query.replace(f"?{key}", f'"{value}"')
-
+            sparql = SPARQLWrapper(self.dbPathOrUrl)  # Usa o endpoint configurado
             sparql.setQuery(query)
             sparql.setReturnFormat(JSON)
             results = sparql.query().convert()
 
-            # Extract data into a DataFrame
+            # Extrai os dados para um DataFrame
             columns = results["head"]["vars"]
             rows = [
                 [binding.get(col, {}).get("value", None) for col in columns]
@@ -522,13 +525,35 @@ class MetadataQueryHandler(QueryHandler):
 
             return pd.DataFrame(rows, columns=columns)
         except Exception as e:
-            print(f"Error executing SPARQL query on {self.db_url}: {query}\nError: {e}")
+            logging.error(f"Error executing SPARQL query on {self.dbPathOrUrl}: {e}")
             return pd.DataFrame()
 
-    def getAllPeople(self):
+    def getById(self, id: str) -> pd.DataFrame:
+        """
+        Retrieve data by its ID.
+        Returns a DataFrame with all identifiable entities matching the input ID.
+        """
+        query = f"""
+        PREFIX schema: <https://schema.org/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+
+        SELECT DISTINCT ?id ?type ?title ?dateCreated ?maker ?spatial
+        WHERE {{
+            ?object dcterms:identifier '{id}' .
+            ?object dcterms:identifier ?id .
+            ?object rdf:type ?type .
+            OPTIONAL {{ ?object dcterms:title ?title . }}
+            OPTIONAL {{ ?object schema:dateCreated ?dateCreated . }}
+            OPTIONAL {{ ?object foaf:maker ?maker . }}
+            OPTIONAL {{ ?object dcterms:spatial ?spatial . }}
+        }}
+        """
+        return self.execute_query(query)
+
+    def getAllPeople(self) -> pd.DataFrame:
         """
         Fetch all people from the database.
-        Expected result includes person names and their identifiers.
         """
         query = """
         PREFIX dcterms: <http://purl.org/dc/terms/>
@@ -542,7 +567,7 @@ class MetadataQueryHandler(QueryHandler):
         """
         return self.execute_query(query)
 
-    def getAllCulturalHeritageObjects(self):
+    def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
         """
         Fetch all cultural heritage objects from the database.
         """
@@ -550,8 +575,7 @@ class MetadataQueryHandler(QueryHandler):
         PREFIX dcterms: <http://purl.org/dc/terms/>
         PREFIX schema: <http://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-        
-        SELECT ?id ?title ?date ?owner ?place 
+        SELECT DISTINCT ?id ?title ?date ?owner ?place
         WHERE {
             ?object a <http://dbpedia.org/ontology/CulturalHeritageObject> .
             ?object dcterms:identifier ?id .
@@ -559,183 +583,53 @@ class MetadataQueryHandler(QueryHandler):
             ?object schema:dateCreated ?date .
             ?object foaf:maker ?owner .
             ?object dcterms:spatial ?place .
-            FILTER (lang(?title) = "en")
         }
+        ORDER BY ?title
         """
         return self.execute_query(query)
 
-    def getAuthorsOfCulturalHeritageObject(self, objectID):
+    def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame:
         """
-        Fetch all authors (people) of a specific cultural heritage object.
-        
-        Parameters:
-        - objectID: The identifier of the cultural heritage object.
+        Retrieve all authors of a specific cultural heritage object by its ID.
         """
-        query = """
+        query = f"""
         PREFIX dcterms: <http://purl.org/dc/terms/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-        
         SELECT DISTINCT ?personName ?personID
-        WHERE {
-            ?object dcterms:identifier "?objectID" ;
+        WHERE {{
+            ?object dcterms:identifier "{object_id}" ;
                     dcterms:creator ?creator .
             ?creator foaf:name ?personName .
             BIND(STR(?creator) AS ?personID)
-        }
+        }}
         ORDER BY ?personName
         """
-        return self.execute_query(query, {'objectID': objectID})
-
-    def getCulturalHeritageObjectsAuthoredBy(self, id_value, id_type="VIAF"):
-        """
-        Fetch all cultural heritage objects authored by a specific person.
-        
-        Parameters:
-        - id_value: The numeric value of the ID, e.g., "123456".
-        - id_type: Type of the ID, e.g., "VIAF" or "ULAN". Defaults to "VIAF".
-        """
-        # Construct the person URI based on the given type and value
-        personID = f"http://example.org/person/{id_type}_{id_value}"
-        
-        query = f"""
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        
-        SELECT DISTINCT ?objectID ?title
-        WHERE {{
-            ?object dcterms:creator <{personID}> ;
-                    dcterms:identifier ?objectID ;
-                    dcterms:title ?title .
-        }}
-        ORDER BY ?objectID
-        """
-        
         return self.execute_query(query)
 
-    
-class MetadataQueryHandler(QueryHandler):
-    def __init__(self):
-        self.dbPathOrUrl = ""
-
-    def execute_sparql_query(self, query):  # Método auxiliar
-        sparql = SPARQLWrapper(self.dbPathOrUrl)
-        sparql.setReturnFormat(JSON)
-        sparql.setQuery(query)
-        try:
-            ret = sparql.queryAndConvert()
-        except Exception as e:
-            print(f"Erro ao executar consulta SPARQL: {e}")
-            return pd.DataFrame()
-
-        # Criar e preencher um DataFrame com os resultados
-        df_columns = ret["head"]["vars"]
-        df = pd.DataFrame(columns=df_columns)
-        for row in ret["results"]["bindings"]:
-            row_dict = {}
-            for column in df_columns:
-                if column in row:
-                    row_dict.update({column: row[column]["value"]})
-            df.loc[len(df)] = row_dict
-        return df.replace(np.nan, " ")
-
-    def getById(self, id):
-        person_query = f"""
-        SELECT DISTINCT ?uri ?name ?id 
-        WHERE {{
-            ?object <http://purl.org/dc/terms/creator> ?uri.
-            ?uri <http://xmlns.com/foaf/0.1/name> ?name.
-            ?uri <http://purl.org/dc/terms/identifier> ?id.
-            ?uri <http://purl.org/dc/terms/identifier> '{id}'.
-        }}
+    def getCulturalHeritageObjectsAuthoredBy(self, id_value: str) -> pd.DataFrame:
         """
-        object_query = f"""
-        SELECT DISTINCT ?object ?id ?type ?title ?date ?owner ?place ?author ?author_name ?author_id 
-        WHERE {{
-            ?object <http://purl.org/dc/terms/identifier> ?id.
-            ?object <http://purl.org/dc/terms/identifier> '{id}'.
-            ?object <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type.
-            ?object <http://purl.org/dc/terms/title> ?title.
-            ?object <http://xmlns.com/foaf/0.1/maker> ?owner.
-            ?object <http://purl.org/dc/terms/spatial> ?place.
-            OPTIONAL {{ ?object <http://schema.org/dateCreated> ?date. }}
-            OPTIONAL {{ 
-                ?object <http://purl.org/dc/terms/creator> ?author.
-                ?author <http://xmlns.com/foaf/0.1/name> ?author_name.
-                ?author <http://purl.org/dc/terms/identifier> ?author_id.
-            }}
-        }}
+        Retrieve all cultural heritage objects authored by a specific person by their ID.
         """
-        person_df = self.execute_sparql_query(person_query)
-        object_df = self.execute_sparql_query(object_query)
-        if not object_df.empty:  # Retornar objetos se existirem
-            return object_df
-        return person_df  # Caso contrário, retornar pessoas ou vazio
-
-    def getAllPeople(self):
-        query = """
-        SELECT DISTINCT ?author_id ?author_name
-        WHERE {
-            ?object <http://purl.org/dc/terms/creator> ?author.
-            ?author <http://purl.org/dc/terms/identifier> ?author_id.
-            ?author <http://xmlns.com/foaf/0.1/name> ?author_name.
-        }
-        """
-        return self.execute_sparql_query(query)
-
-    def getAllCulturalHeritageObjects(self):
-        query = """
-        SELECT DISTINCT ?object ?id ?type ?title ?date ?owner ?place ?author ?author_name ?author_id 
-        WHERE { 
-            ?object <http://purl.org/dc/terms/identifier> ?id. 
-            ?object <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type. 
-            ?object <http://purl.org/dc/terms/title> ?title. 
-            ?object <http://xmlns.com/foaf/0.1/maker> ?owner. 
-            ?object <http://purl.org/dc/terms/spatial> ?place. 
-            OPTIONAL { ?object <http://schema.org/dateCreated> ?date. } 
-            OPTIONAL { 
-                ?object <http://purl.org/dc/terms/creator> ?author. 
-                ?author <http://xmlns.com/foaf/0.1/name> ?author_name. 
-                ?author <http://purl.org/dc/terms/identifier> ?author_id.
-            }
-        }
-        """
-        return self.execute_sparql_query(query)
-
-    def getAuthorsOfCulturalHeritageObject(self, object_id: str):
         query = f"""
-        SELECT DISTINCT ?author ?author_name ?author_id 
-        WHERE {{ 
-            ?object <http://purl.org/dc/terms/identifier> '{object_id}'. 
-            ?object <http://purl.org/dc/terms/creator> ?author. 
-            ?author <http://xmlns.com/foaf/0.1/name> ?author_name. 
-            ?author <http://purl.org/dc/terms/identifier> ?author_id. 
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX schema: <http://schema.org/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+        SELECT DISTINCT ?objectID ?title ?date ?owner ?place
+        WHERE {{
+            ?object dcterms:creator <http://example.org/person/{id_value}> ;
+                    dcterms:identifier ?objectID ;
+                    dcterms:title ?title ;
+                    schema:dateCreated ?date ;
+                    foaf:maker ?owner ;
+                    dcterms:spatial ?place .
         }}
+        ORDER BY ?title
         """
-        return self.execute_sparql_query(query)
+        return self.execute_query(query)
 
-    def getCulturalHeritageObjectsAuthoredBy(self, personId: str):
-        query = f"""
-        SELECT DISTINCT ?object ?id ?type ?title ?date ?owner ?place ?author ?author_name ?author_id 
-        WHERE {{ 
-            ?object <http://purl.org/dc/terms/identifier> ?id. 
-            ?object <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type. 
-            ?object <http://purl.org/dc/terms/title> ?title. 
-            ?object <http://xmlns.com/foaf/0.1/maker> ?owner. 
-            ?object <http://purl.org/dc/terms/spatial> ?place. 
-            ?object <http://purl.org/dc/terms/creator> ?author. 
-            ?author <http://xmlns.com/foaf/0.1/name> ?author_name.
-            ?author <http://purl.org/dc/terms/identifier> ?author_id.
-            OPTIONAL {{ ?object <http://schema.org/dateCreated> ?date. }}
-            FILTER CONTAINS(?author_id, '{personId}')
-        }}
-        """
-        return self.execute_sparql_query(query)
-
-    
 activities = DataFrame()
 acquisition_sql_df = DataFrame()
-tool_sql_df= DataFrame()
-acquisition_sql_df = DataFrame()
-tool_sql_df= DataFrame()
+tool_sql_df = DataFrame()
 
 class ProcessDataQueryHandler(QueryHandler):
     pass
@@ -756,95 +650,78 @@ class ProcessDataQueryHandler(QueryHandler):
                 if dfs[key].empty:
                     print(f"Warning: {key} table is empty.")
 
-        activities = concat([dfs["Acquisition"], dfs["Processing"], dfs["Modelling"], dfs["Optimising"], dfs["Exporting"]], ignore_index=True)
-        activities = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
+        # Modify the unique_id in the Tools table to ensure it's unique
+        dfs["Tools"]["unique_id"] = dfs["Tools"]["unique_id"].apply(lambda x: f"tool_{x}")
 
-        acquisition_sql_df = merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
+        # Combine all activities except Tools
+        activities = concat(
+            [dfs["Acquisition"], dfs["Processing"], dfs["Modelling"], dfs["Optimising"], dfs["Exporting"]],
+            ignore_index=True
+        )
+
+        # Merge activities with tools, using modified unique_id
+        activities = merge(activities, dfs["Tools"], left_on="unique_id", right_on="unique_id", how="left")
+
+        # Example merge with acquisition table for a specific use case
+        acquisition_sql_df = merge(dfs["Acquisition"], dfs["Tools"], on="unique_id", how="inner")
         print("Activities type:", type(activities))  # Debugging
         print("Acquisition type:", type(acquisition_sql_df))  # Debugging
         return activities, acquisition_sql_df
 
-
     def getActivitiesByResponsibleInstitution(self, partialName):
         institution_df = DataFrame()
-        for idx, row in activities.iterrows(): # check if there is something to iterate over the rows without getting also the index
+        for idx, row in activities.iterrows():
             for column_name, item in row.items():
                 if column_name == "responsible institute":
-                    # exact match
+                    # Exact match
                     if partialName.lower() == item.lower():
-                    # use backticks to refer to column names containing spaces and @ for variables
                         institution_df = activities.query("`responsible institute` == @item")
-                    # partial match
+                    # Partial match
                     elif partialName.lower() in item.lower():
                         institution_df = activities.query("`responsible institute` == @item")
-                
         return institution_df
-    
+
     def getActivitiesByResponsiblePerson(self, partialName):
         person_df = DataFrame()
         for idx, row in activities.iterrows():
             for column_name, person in row.items():
                 if column_name == "responsible person":
-                    # exact match
+                    # Exact match
                     if partialName.lower() == person.lower():
-                        # use backticks to refer to column names containing spaces and @ for variables
                         person_df = activities.query("`responsible person` == @person")
-                    # partial match
+                    # Partial match
                     elif partialName.lower() in person.lower():
                         person_df = activities.query("`responsible person` == @person")
-
         return person_df
-    
+
     def getActivitiesStartedAfter(self, date):
         start_date_df = DataFrame()
-        for idx, row in activities.iterrows():
-            for column_name, item in row.items():
-                if column_name == "start date":
-                    start_date_df = activities.query("`start date` >= @date")
-        
+        start_date_df = activities.query("`start date` >= @date")
         return start_date_df
-    
+
     def getActivitiesEndedBefore(self, date):
         end_date_df = DataFrame()
-        for idx, row in activities.iterrows():
-            for column_name, item in row.items():
-                if column_name == "end date":
-                    end_date_df = activities.query("`end date` <= @date and `end date` != ''")
-        
+        end_date_df = activities.query("`end date` <= @date and `end date` != ''")
         return end_date_df
 
-    
     def getAcquisitionsByTechnique(self, inputtechnique):
         technique_df = DataFrame()
-        for idx, row in acquisition_sql_df.iterrows():
-            for column_name, technique in row.items():
-                if column_name == "technique":
-                    # exact match
-                    if inputtechnique.lower() == technique.lower():
-                    # use backticks to refer to column names containing spaces and @ for variables
-                        technique_df = acquisition_sql_df.query("technique` == @technique")
-                    # partial match
-                    elif inputtechnique.lower() in technique.lower():
-                        technique_df = acquisition_sql_df.query("`technique` == @technique")
-                    
+        technique_df = acquisition_sql_df.query("`technique` == @inputtechnique")
         return technique_df
 
     def getActivitiesUsingTool(self, tool):
+        # Merge the activities DataFrame with the tools DataFrame
+        activities_with_tool = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
 
-        # Merge  the activities DataFrame  with the tool DataFrame
-        #activities_with_tool = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
-        activities = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
-    
         # Normalize the tool string for comparison
         tool_lower = tool.lower()
-    
-        # Filter rows where the tool column matches the exact or partial tool name
-        activities_tool = activities[
-            activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)
-        ]
-    
-        return activities_tool
 
+        # Filter rows where the tool column matches the exact or partial tool name
+        activities_tool = activities_with_tool[
+            activities_with_tool['tool'].str.lower().str.contains(tool_lower, case=False, na=False)
+        ]
+        return activities_tool
+    
 class BasicMashup:
     def __init__(self, metadataQuery=None, processQuery=None):
         self.metadataQuery = metadataQuery if metadataQuery is not None else []  # Initialize metadataQuery as a list of MetadataQueryHandler
@@ -982,65 +859,69 @@ class BasicMashup:
 
         return cultural_heritage_objects
 
-    def getCulturalHeritageObjectsAuthoredBy(self, authorId: str): 
-        # List to collect the final cultural heritage objects      
-        object_result_list = [] 
-    
-        # Check if there are any handlers to query
-        if not self.metadataQuery: 
-            return object_result_list  # Return an empty list if no handlers are available 
-    
-        # List to collect DataFrames to be merged
-        df_list = [] 
-    
-        # Iterate over each handler in self.metadataQuery
-        for handler in self.metadataQuery:  
-            # Retrieve cultural heritage objects authored by the given author
-            df_objects = handler.getCulturalHeritageObjectsAuthoredBy(authorId)  
-        
-            # If the DataFrame is not empty
-            if df_objects is not None and not df_objects.empty:  
-                # Combine author data with cultural heritage objects
-                df_object_update = self.combineAuthorsOfObjects(df_objects, handler)  
-            
-                # Add the processed DataFrame to the df_list
-                df_list.append(df_object_update)  
-        
-        # If df_list is empty, return it as an empty list
-        if not df_list:  
-            return object_result_list  
-    
-        # Merge all DataFrames into a single one, remove duplicates, and handle NaN values
-        df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
-    
-        # Iterate through each row of the merged DataFrame
-        for _, row in df_union.iterrows(): 
-            obj_type = row['type']  # Extract the object type from the 'type' column
-        
-            # Check if obj_type is in self.type_mapping
-            if obj_type in self.type_mapping: 
-                # Get the class associated with the object type
-                object_class = self.type_mapping[obj_type]  
-            
-                # Create the object using the corresponding class constructor
-                obj = object_class(  # Create the cultural heritage object using the corresponding class
-                    id=str(row['id']),  # Pass the object ID
-                    title=row['title'],  # Pass the object title
-                    date=str(row['date']),  # Pass the object date
-                    owner=row['owner'],  # Pass the object owner
-                    place=row['place'],  # Pass the object place
-                    authors=row['Authors']  # Pass the authors associated with the object
-                )
-                # Add the created object to the result list
-                object_result_list.append(obj)
-            else:
-                # If the object type is not present in self.type_mapping print a warning
-                print(f"Warning: No object type: {obj_type} found")  
-                
-                # Continue to the next row without interrupting the process
-                continue
+    def getCulturalHeritageObjectsAuthoredBy(self, id_type="VIAF", id_value=None):
+        """
+        Fetch all cultural heritage objects authored by a specific person.
 
-        return object_result_list  # Return the list of created objects
+        Parameters:
+        - id_type: Type of the ID, e.g., "VIAF" or "ULAN". Defaults to "VIAF".
+        - id_value: The numeric value of the ID, e.g., "123456".
+
+        Returns:
+        - List of CulturalHeritageObject instances authored by the person.
+        """
+        if not id_value:
+            raise ValueError("id_value is required to identify the author.")
+
+        # Build the author URI
+        personID = f"http://example.org/person/{id_type}_{id_value}"
+
+        # SPARQL query to fetch cultural heritage objects authored by this person
+        query = f"""
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX schema: <http://schema.org/>
+        SELECT DISTINCT ?objectID ?title ?date ?owner ?place
+        WHERE {{
+            ?object dcterms:creator <{personID}> ;
+                    dcterms:identifier ?objectID ;
+                    dcterms:title ?title ;
+                    schema:dateCreated ?date ;
+                    foaf:maker ?owner ;
+                    dcterms:spatial ?place .
+        }}
+        """
+
+        # Execute the query and fetch results
+        results = self.execute_query(query)
+        if results.empty:
+            return []  # No objects found
+
+        # Create Author instance
+        author_name_query = f"""
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+        SELECT DISTINCT ?name
+        WHERE {{
+            <{personID}> foaf:name ?name .
+        }}
+        """
+        author_results = self.execute_query(author_name_query)
+        author_name = author_results["name"][0] if not author_results.empty else "Unknown"
+        author = Author(name=author_name, identifier=id_value)
+
+        # Create CulturalHeritageObject instances
+        cultural_objects = []
+        for _, row in results.iterrows():
+            cultural_object = CulturalHeritageObject(
+                id=row["objectID"],
+                title=row["title"],
+                date=row["date"],
+                owner=row["owner"],
+                place=row["place"]
+            )
+            cultural_object.addAuthor(author)  # Link the author to the object
+            cultural_objects.append(cultural_object)
+
+        return cultural_objects
 
     # methods for relational db start here
     
@@ -1303,3 +1184,5 @@ class AdvancedMashup(BasicMashup):
             print(f"Error during SPARQL or SQL execution: {e}")
 
         return authors
+
+    
