@@ -15,31 +15,26 @@ class ProcessDataQueryHandler(QueryHandler):
     pass
 
     def getAllActivities(self):
-        
         with connect("relational.db") as con:
-            query_acquisition = "SELECT * FROM Acquisition"
-            acquisition_sql_df = read_sql(query_acquisition, con)
+            queries = {
+                "Acquisition": "SELECT * FROM Acquisition",
+                "Processing": "SELECT * FROM Processing",
+                "Modelling": "SELECT * FROM Modelling",
+                "Optimising": "SELECT * FROM Optimising",
+                "Exporting": "SELECT * FROM Exporting",
+                "Tools": "SELECT * FROM Tools",
+            }
+            dfs = {}
+            for key, query in queries.items():
+                dfs[key] = read_sql(query, con)
+                if dfs[key].empty:
+                    print(f"Warning: {key} table is empty.")
 
-            query_processing = "SELECT * FROM Processing"
-            processing_sql_df = read_sql(query_processing, con)
-
-            query_modelling = "SELECT * FROM Modelling"
-            modelling_sql_df = read_sql(query_modelling, con)
-
-            query_optimising = "SELECT * FROM Optimising"
-            optimising_sql_df = read_sql(query_optimising, con)
-
-            query_exporting = "SELECT * FROM Exporting"
-            exporting_sql_df = read_sql(query_exporting, con)
-
-            query_tool = "SELECT * FROM Tools"
-            tool_sql_df = read_sql(query_tool, con)
-
-
-        activities = concat([acquisition_sql_df, processing_sql_df, modelling_sql_df, optimising_sql_df, exporting_sql_df], ignore_index=True)
+        activities = concat([dfs["Acquisition"], dfs["Processing"], dfs["Modelling"], dfs["Optimising"], dfs["Exporting"]], ignore_index=True)
         activities = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
 
         acquisition_sql_df = merge(acquisition_sql_df, tool_sql_df, left_on="unique_id", right_on="unique_id")
+        print(type(activities))  # Debugging
         return activities, acquisition_sql_df
 
 
