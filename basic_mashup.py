@@ -262,11 +262,16 @@ class BasicMashup:
 
             concat_df = concat(activities_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
+
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
         
         else:
             print("No processQueryHandler found")
         
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
         
 
     def getActivitiesByResponsibleInstitution(self, partialName):
@@ -275,11 +280,16 @@ class BasicMashup:
 
             concat_df = concat(act_by_inst_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
+
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
         
         else:
             print("No processQueryHandler found")
         
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
     def getActivitiesByResponsiblePerson(self, partialName):
@@ -289,10 +299,15 @@ class BasicMashup:
             concat_df = concat(act_by_pers_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
 
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
+
         else:
             print("No processQueryHandler found")
 
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
     def getActivitiesStartedAfter(self, date):
@@ -302,10 +317,15 @@ class BasicMashup:
             concat_df = concat(act_start_aft_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
 
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
+
         else:
             print("No processQueryHandler found")
-
-        return instantiateClass(concat_df_cleaned)
+        
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
     def getActivitiesEndedBefore(self, date):
@@ -315,10 +335,15 @@ class BasicMashup:
             concat_df = concat(act_end_before_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
 
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
+
         else:
             print("No processQueryHandler found")
 
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
     def getAcquisitionsByTechnique(self, inputtechnique):
@@ -328,10 +353,15 @@ class BasicMashup:
             concat_df = concat(act_by_technique_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
 
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
+
         else:
             print("No processQueryHandler found")
 
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
     def getActivitiesUsingTool(self, tool):
@@ -341,10 +371,15 @@ class BasicMashup:
             concat_df = concat(act_activities_tool_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
 
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
+
         else:
             print("No processQueryHandler found")
 
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
 def instantiateClass(activity_df):
@@ -356,20 +391,8 @@ def instantiateClass(activity_df):
         "optimising": Optimising,
         "exporting": Exporting
     }
-        
-    with connect("relational.db") as con:
-        query = "SELECT * FROM Tools"
-        tools_df_sql = read_sql(query, con)
 
-    if len(tools_df_sql) > len(activity_df):
-        for tools_idx, tools_row in tools_df_sql.iterrows():
-            for act_idx, act_row in activity_df.iterrows():
-                if tools_row["unique_id"] != act_row["unique_id"]:
-                    tools_df_sql.drop(tools_idx)
-    
-    merged_df = merge(activity_df, tools_df_sql, left_on="unique_id", right_on="unique_id") # possibili problemi qui (controllare anche processdataquery per lo stesso motivo)
-
-    for idx, row in merged_df.iterrows():
+    for idx, row in activity_df.iterrows():
         activity_from_id = re.sub("_\\d+", "", row["unique_id"])
         if activity_from_id in activity_mapping.keys() and activity_from_id == "acquisition":
             activity_obj = Acquisition(row["responsible institute"], row["responsible person"], row["technique"], row["tool"], row["start date"], row["end date"], row["refers_to"])
@@ -380,6 +403,7 @@ def instantiateClass(activity_df):
             activity_list.append(activity_obj)
     
     return activity_list
+    
 
 
 

@@ -37,7 +37,10 @@ class ProcessDataQueryHandler(QueryHandler):
 
 
         activities = concat([acquisition_sql_df, processing_sql_df, modelling_sql_df, optimising_sql_df, exporting_sql_df], ignore_index=True)
-        return activities
+        activities = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
+
+        acquisition_sql_df = merge(acquisition_sql_df, tool_sql_df, left_on="unique_id", right_on="unique_id")
+        return activities, acquisition_sql_df
 
 
     def getActivitiesByResponsibleInstitution(self, partialName):
@@ -103,34 +106,19 @@ class ProcessDataQueryHandler(QueryHandler):
                         technique_df = acquisition_sql_df.query("`technique` == @technique")
                     
         return technique_df
-    
 
     def getActivitiesUsingTool(self, tool):
-        activities_with_tool = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
-        activities_tool = DataFrame()    
-        for idx, row in activities_with_tool.iterrows():
-            for column_name, value in row.items():
-                if column_name == "tool":
-                # Corrispondenza esatta
-                    if value.lower() == tool.lower():
-                        activities_tool = activities.query("`tool` == @tool")
-                # Corrispondenza parziale
-                    elif tool.lower() in value.lower():
-                         activities_tool = activities.query("`tool` == @tool")
-    
-        return activities_tool
 
-
-    def getActivitiesUsingTool(self, tool):
         # Merge  the activities DataFrame  with the tool DataFrame
-        activities_with_tool = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
+        #activities_with_tool = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
+        activities = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
     
         # Normalize the tool string for comparison
         tool_lower = tool.lower()
     
         # Filter rows where the tool column matches the exact or partial tool name
-        activities_tool = activities_with_tool[
-            activities_with_tool['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)
+        activities_tool = activities[
+            activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)
         ]
     
         return activities_tool
