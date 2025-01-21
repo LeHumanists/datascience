@@ -5,7 +5,10 @@ from pandas import DataFrame
 from pandas import Series
 from pandas import concat
 from pandas import read_sql
+from pandas import merge
 import re
+import numpy as np
+import os
 from rdflib import Graph, URIRef, RDF, Literal
 from rdflib.namespace import FOAF, DCTERMS, XSD
 from rdflib import Namespace
@@ -17,6 +20,7 @@ from SPARQLWrapper import SPARQLWrapper, JSON
 from unittest.mock import MagicMock
 import logging 
 from typing import List, Optional
+from sparql_dataframe import get
 
 class IdentifiableEntity(object):
     def __init__(self, identifier):
@@ -164,24 +168,28 @@ class Optimising(Activity):
 class Exporting(Activity):
     pass
 
+class Handler(object):
+    def __init__(self, dbPathOrUrl: str = ""):
+        self.dbPathOrUrl = dbPathOrUrl
 
-class Handler:
-    def __init__(self):
-        self.dbPathOrUrl = ""
-    
     def getDbPathOrUrl(self):
         return self.dbPathOrUrl
-    
+
     def setDbPathOrUrl(self, url):
         self.dbPathOrUrl = url
+        return True # Return True to indicate success
 
 class UploadHandler(Handler):
-    pass
+    def __init__(self):
+        super().__init__()  # Initialize any base attributes if needed
 
-    def pushDataToDb(self, file_path) -> bool:
-        # return True if data is uploaded to the db
-        pass
-
+    def pushDataToDb(self, file_path: str):
+        """
+        Abstract method to upload data to the database.
+        This is intended to be overridden in subclasses.
+        """
+        pass  # No implementation here; subclasses provide their own logic
+    
 class ResourceURIs:
     NauticalChart = URIRef("https://dbpedia.org/resource/Nautical_chart")
     ManuscriptPlate = URIRef("http://example.org/ManuscriptPlate")
@@ -195,96 +203,90 @@ class ResourceURIs:
     Map = URIRef("https://dbpedia.org/resource/Category:Maps")
 
 
+
 class MetadataUploadHandler(UploadHandler):
     def __init__(self):
-        self.my_graph = Graph()  # Initialize the RDF graph
-        self.dbpedia = Namespace("http://dbpedia.org/resource/")
+        super().__init__()
+        self.my_graph = Graph()  # RDF graph instance
         self.example = Namespace("http://example.org/")
         self.schema = Namespace("http://schema.org/")
-        
-        # Bind namespaces to the graph
+        self.my_graph.bind("example", self.example)
         self.my_graph.bind("schema", self.schema)
-        self.my_graph.bind("dbpedia", self.dbpedia)
-    
-    def pushDataToDb(self, file_path) -> bool:
-        try:
-            df = pd.read_csv(file_path)  # Read the CSV file into a DataFrame
-            print("Loaded DataFrame:")
-            print(df)  # Show the DataFrame
-        except Exception as e:
-            print(f"Error reading CSV file: {e}")  # Print error message if reading fails
+
+    def pushDataToDb(self, file_path: str) -> bool:
+        """
+        Reads a CSV file and uploads its data to a graph database.
+        """
+        if not os.path.exists(file_path):
+            print(f"Error: File not found at {file_path}")
             return False
-        
-        for idx, row in df.iterrows():  # Iterate over each row in the DataFrame
-            # Use the existing 'Id' from the CSV file as the unique identifier
-            cultural_object_id = str(row["Id"])
-            subj = URIRef(self.example + cultural_object_id)  # Use the 'Id' as part of the URI
-            
-            # Assigning object ID
-            self.my_graph.add((subj, DCTERMS.identifier, Literal(cultural_object_id)))
-            
-            # Mapping the type based on the "Type" column in the CSV
-            type_mapping = {
-                "Nautical chart": ResourceURIs.NauticalChart,
-                "Manuscript plate": ResourceURIs.ManuscriptPlate,
-                "Manuscript volume": ResourceURIs.ManuscriptVolume,
-                "Printed volume": ResourceURIs.PrintedVolume,
-                "Printed material": ResourceURIs.PrintedMaterial,
-                "Herbarium": ResourceURIs.Herbarium,
-                "Specimen": ResourceURIs.Specimen,
-                "Painting": ResourceURIs.Painting,
-                "Model": ResourceURIs.Model,
-                "Map": ResourceURIs.Map
-            }
-            
-            # Check if the 'Type' exists in the type_mapping dictionary and assign the RDF type
-            item_type = row.get("Type", "").strip()
-            if item_type in type_mapping:
-                self.my_graph.add((subj, RDF.type, type_mapping[item_type]))
-            
-            # Add title (or other properties) from the CSV
+
+        try:
+            # Load the CSV file into a DataFrame
+            df = pd.read_csv(file_path)
+
+            # Ensure the DataFrame is not empty
+            if df.empty:
+                print("Error: The CSV file is empty or improperly formatted.")
+                return False
+
+            # Process each row into RDF triples
+            for _, row in df.iterrows():
+                self._processRow(row)
+
+            # Upload the graph to Blazegraph
+            return self._uploadGraphToBlazegraph()
+
+        except Exception as e:
+            print(f"Error processing CSV file {file_path}: {e}")
+            return False
+
+    def _processRow(self, row: pd.Series):
+        """Processes a single row and adds RDF triples to the graph."""
+        subj = URIRef(self.example + str(row["Id"]))
+        self.my_graph.add((subj, DCTERMS.identifier, Literal(row["Id"])))
+
+        # Type mapping
+        type_mapping = {
+            "Nautical chart": ResourceURIs.NauticalChart,
+            "Manuscript plate": ResourceURIs.ManuscriptPlate,
+            "Manuscript volume": ResourceURIs.ManuscriptVolume,
+            "Printed volume": ResourceURIs.PrintedVolume,
+            "Printed material": ResourceURIs.PrintedMaterial,
+            "Herbarium": ResourceURIs.Herbarium,
+            "Specimen": ResourceURIs.Specimen,
+            "Painting": ResourceURIs.Painting,
+            "Model": ResourceURIs.Model,
+            "Map": ResourceURIs.Map,
+        }
+        if row.get("Type", "").strip() in type_mapping:
+            self.my_graph.add((subj, RDF.type, type_mapping[row["Type"].strip()]))
+
+        # Add additional properties
+        if pd.notna(row.get("Title")):
             self.my_graph.add((subj, DCTERMS.title, Literal(row["Title"].strip())))
-            
-            # Additional fields like date, owner, place, etc.
-            if pd.notna(row.get("Date")):
-                self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.string)))
-            if pd.notna(row.get("Owner")):
-                self.my_graph.add((subj, FOAF.maker, Literal(row["Owner"].strip())))
-            if pd.notna(row.get("Place")):
-                self.my_graph.add((subj, DCTERMS.spatial, Literal(row["Place"].strip())))
-            
-            # Process authors
-            authors = row["Author"].split(",") if isinstance(row["Author"], str) else []
-            for author_string in authors:
-                author_string = author_string.strip()
-                
-                # Use regex to find author ID with either VIAF or ULAN
-                author_id_match = re.search(r'\((VIAF|ULAN):(\d+)\)', author_string)  # Match both VIAF and ULAN formats
-                if author_id_match:
-                    id_type = author_id_match.group(1)  # Either 'VIAF' or 'ULAN'
-                    id_value = author_id_match.group(2)  # The numeric ID
-                    person_id = URIRef(f"http://example.org/person/{id_type}_{id_value}")
-                else:
-                    # Fallback to a simple URI based on the author's name if no ID is found
-                    person_id = URIRef(f"http://example.org/person/{author_string.replace(' ', '_')}")
-                
-                # Add the author information to the graph
-                self.my_graph.add((person_id, DCTERMS.creator, subj))
-                self.my_graph.add((person_id, FOAF.name, Literal(author_string, datatype=XSD.string)))
-        
-        # Uploading data to Blazegraph after processing all rows
+        if pd.notna(row.get("Date")):
+            self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.date)))
+        if pd.notna(row.get("Owner")):
+            self.my_graph.add((subj, FOAF.maker, Literal(row["Owner"].strip())))
+        if pd.notna(row.get("Place")):
+            self.my_graph.add((subj, DCTERMS.spatial, Literal(row["Place"].strip())))
+
+    def _uploadGraphToBlazegraph(self) -> bool:
+        """Uploads the RDF graph to Blazegraph."""
         try:
             store = SPARQLUpdateStore()
             store.open((self.dbPathOrUrl, self.dbPathOrUrl))
-            
+
             for triple in self.my_graph.triples((None, None, None)):
                 store.add(triple)
-            
+
             store.close()
-            return True  # Return True if the upload is successful
-        
+            print("Data successfully uploaded to Blazegraph.")
+            return True
+
         except Exception as e:
-            print("The upload of data to Blazegraph failed: " + str(e))
+            print(f"Error uploading to Blazegraph: {e}")
             return False
 
 class ProcessDataUploadHandler(UploadHandler):
@@ -414,28 +416,104 @@ class ProcessDataUploadHandler(UploadHandler):
             print(populated_tables)
             return populated_tables
 
+class QueryHandler(Handler):
+    def __init__(self, dbPathOrUrl: str = ""):
+        super().__init__(dbPathOrUrl)
 
-class QueryHandler(Handler): 
-    def __init__(self, dbPathOrUrl: str = ""):  
-        self.dbPathOrUrl = dbPathOrUrl
+    def getById(self, id: str) -> DataFrame:
+        """
+        Retrieve data by its ID.
+        Returns a DataFrame with all identifiable entities matching the input ID.
+        """
+        object_query = f"""
+        PREFIX schema: <https://schema.org/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+        PREFIX dcterms: <http://purl.org/dc/terms/>
 
-    def getById(self, id: str) -> DataFrame: # Retrieve data by its ID. This method does nothing here and should be implemented in subclasses to provide specific query logic.
-        pass
-    
-class MetadataQueryHandler:
-    def __init__(self, db_url=""):
-        """Inicialize a class with the URL of the database."""
-        self.db_url = db_url
+        SELECT DISTINCT ?id ?type ?title ?dateCreated ?maker ?spatial
+        WHERE {{
+            ?object dcterms:identifier '{id}' .
+            ?object dcterms:identifier ?id .
+            ?object rdf:type ?type .
+            OPTIONAL {{ ?object dcterms:title ?title . }}
+            OPTIONAL {{ ?object schema:dateCreated ?dateCreated . }}
+            OPTIONAL {{ ?object foaf:maker ?maker . }}
+            OPTIONAL {{ ?object dcterms:spatial ?spatial . }}
+        }}
+        """
 
-    def execute_query(self, query):
-        """Execute a query SPARQL and retorn the result as a DataFrame."""
+        person_query = f"""
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
+        SELECT DISTINCT ?id ?name ?createdFor
+        WHERE {{
+            ?person dcterms:identifier '{id}' .
+            ?person dcterms:identifier ?id .
+            ?person foaf:name ?name .
+            OPTIONAL {{ ?person dcterms:creator ?createdFor . }}
+        }}
+        """
+        # Execute both queries
+        object_df = self._execute_sparql(object_query)
+        if not object_df.empty:
+            return object_df
+
+        person_df = self._execute_sparql(person_query)
+        if not person_df.empty:
+            return person_df
+
+        # Log and return empty DataFrame if no results
+        logging.warning(f"No data found for ID: {id}")
+        return pd.DataFrame(columns=["id", "type", "title", "dateCreated", "maker", "spatial", "name", "createdFor"])
+
+    def _execute_sparql(self, query: str) -> pd.DataFrame:
+        """
+        Helper method to execute SPARQL queries and return results as a DataFrame.
+        """
+        if not self.dbPathOrUrl:
+            logging.error("SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
+            return pd.DataFrame()
+
         try:
-            sparql = SPARQLWrapper(self.db_url)
+            sparql = SPARQLWrapper(self.dbPathOrUrl)
             sparql.setQuery(query)
             sparql.setReturnFormat(JSON)
             results = sparql.query().convert()
 
-            # Extract data directly as a DataFrame
+            # Extract data into a DataFrame
+            columns = results["head"]["vars"]
+            rows = [
+                [binding.get(col, {}).get("value", None) for col in columns]
+                for binding in results["results"]["bindings"]
+            ]
+            return pd.DataFrame(rows, columns=columns)
+        except Exception as e:
+            logging.error(
+                f"Error executing SPARQL query on {self.dbPathOrUrl}:\nQuery: {query}\nError: {e}"
+            )
+            return pd.DataFrame()
+        
+class MetadataQueryHandler(QueryHandler):
+    def __init__(self, db_url=""):
+        """Initialize a class with the URL of the database."""
+        self.db_url = db_url
+
+    def execute_query(self, query, variables=None):
+        """Execute a SPARQL query with optional variable substitution."""
+        try:
+            sparql = SPARQLWrapper(self.db_url)
+
+            # If variables are provided, substitute them into the query
+            if variables:
+                for key, value in variables.items():
+                    query = query.replace(f"?{key}", f'"{value}"')
+
+            sparql.setQuery(query)
+            sparql.setReturnFormat(JSON)
+            results = sparql.query().convert()
+
+            # Extract data into a DataFrame
             columns = results["head"]["vars"]
             rows = [
                 [binding.get(col, {}).get("value", None) for col in columns]
@@ -444,7 +522,7 @@ class MetadataQueryHandler:
 
             return pd.DataFrame(rows, columns=columns)
         except Exception as e:
-            print(f"Error executing SPARQL query: {e}")
+            print(f"Error executing SPARQL query on {self.db_url}: {query}\nError: {e}")
             return pd.DataFrame()
 
     def getAllPeople(self):
@@ -453,6 +531,7 @@ class MetadataQueryHandler:
         Expected result includes person names and their identifiers.
         """
         query = """
+        PREFIX dcterms: <http://purl.org/dc/terms/>
         SELECT DISTINCT ?personName ?personID
         WHERE {
             ?object dcterms:creator ?creator .
@@ -462,22 +541,29 @@ class MetadataQueryHandler:
         ORDER BY ?personName
         """
         return self.execute_query(query)
-    
-    def getAllCulturalHeritageObjects (self):
+
+    def getAllCulturalHeritageObjects(self):
+        """
+        Fetch all cultural heritage objects from the database.
+        """
         query = """
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX schema: <http://schema.org/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+        
         SELECT ?id ?title ?date ?owner ?place 
-        WHERE (
-            ?object a dbo:CulturalHeritageObject .
-            ?object a DCTERMS.identifier ?id .
-            ?object DCTERMS.title ?title .
-            ?object schema.dateCreated ?date .
-            ?object FOAF.maker ?owner .
-            ?object DCTERMS.spatial ?place .
+        WHERE {
+            ?object a <http://dbpedia.org/ontology/CulturalHeritageObject> .
+            ?object dcterms:identifier ?id .
+            ?object dcterms:title ?title .
+            ?object schema:dateCreated ?date .
+            ?object foaf:maker ?owner .
+            ?object dcterms:spatial ?place .
             FILTER (lang(?title) = "en")
-        ) 
+        }
         """
         return self.execute_query(query)
-    
+
     def getAuthorsOfCulturalHeritageObject(self, objectID):
         """
         Fetch all authors (people) of a specific cultural heritage object.
@@ -486,48 +572,170 @@ class MetadataQueryHandler:
         - objectID: The identifier of the cultural heritage object.
         """
         query = """
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+        
         SELECT DISTINCT ?personName ?personID
         WHERE {
-            ?object dcterms:identifier ?objectID ;
+            ?object dcterms:identifier "?objectID" ;
                     dcterms:creator ?creator .
             ?creator foaf:name ?personName .
             BIND(STR(?creator) AS ?personID)
         }
         ORDER BY ?personName
         """
-        # Use parameterized query to pass `objectID`
         return self.execute_query(query, {'objectID': objectID})
 
-    
-    def getCulturalHeritageObjectsAuthoredBy(self, id_type, id_value):
+    def getCulturalHeritageObjectsAuthoredBy(self, id_value, id_type="VIAF"):
         """
         Fetch all cultural heritage objects authored by a specific person.
-
+        
         Parameters:
-        - id_type: Type of the ID, e.g., "VIAF" or "ULAN".
         - id_value: The numeric value of the ID, e.g., "123456".
+        - id_type: Type of the ID, e.g., "VIAF" or "ULAN". Defaults to "VIAF".
         """
         # Construct the person URI based on the given type and value
         personID = f"http://example.org/person/{id_type}_{id_value}"
         
-        query = """
+        query = f"""
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        
         SELECT DISTINCT ?objectID ?title
-        WHERE {
+        WHERE {{
             ?object dcterms:creator <{personID}> ;
                     dcterms:identifier ?objectID ;
                     dcterms:title ?title .
-        }
+        }}
         ORDER BY ?objectID
         """
-        # Format the query with the person URI
-        query = query.format(personID=personID)
         
         return self.execute_query(query)
 
+    
+class MetadataQueryHandler(QueryHandler):
+    def __init__(self):
+        self.dbPathOrUrl = ""
+
+    def execute_sparql_query(self, query):  # Método auxiliar
+        sparql = SPARQLWrapper(self.dbPathOrUrl)
+        sparql.setReturnFormat(JSON)
+        sparql.setQuery(query)
+        try:
+            ret = sparql.queryAndConvert()
+        except Exception as e:
+            print(f"Erro ao executar consulta SPARQL: {e}")
+            return pd.DataFrame()
+
+        # Criar e preencher um DataFrame com os resultados
+        df_columns = ret["head"]["vars"]
+        df = pd.DataFrame(columns=df_columns)
+        for row in ret["results"]["bindings"]:
+            row_dict = {}
+            for column in df_columns:
+                if column in row:
+                    row_dict.update({column: row[column]["value"]})
+            df.loc[len(df)] = row_dict
+        return df.replace(np.nan, " ")
+
+    def getById(self, id):
+        person_query = f"""
+        SELECT DISTINCT ?uri ?name ?id 
+        WHERE {{
+            ?object <http://purl.org/dc/terms/creator> ?uri.
+            ?uri <http://xmlns.com/foaf/0.1/name> ?name.
+            ?uri <http://purl.org/dc/terms/identifier> ?id.
+            ?uri <http://purl.org/dc/terms/identifier> '{id}'.
+        }}
+        """
+        object_query = f"""
+        SELECT DISTINCT ?object ?id ?type ?title ?date ?owner ?place ?author ?author_name ?author_id 
+        WHERE {{
+            ?object <http://purl.org/dc/terms/identifier> ?id.
+            ?object <http://purl.org/dc/terms/identifier> '{id}'.
+            ?object <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type.
+            ?object <http://purl.org/dc/terms/title> ?title.
+            ?object <http://xmlns.com/foaf/0.1/maker> ?owner.
+            ?object <http://purl.org/dc/terms/spatial> ?place.
+            OPTIONAL {{ ?object <http://schema.org/dateCreated> ?date. }}
+            OPTIONAL {{ 
+                ?object <http://purl.org/dc/terms/creator> ?author.
+                ?author <http://xmlns.com/foaf/0.1/name> ?author_name.
+                ?author <http://purl.org/dc/terms/identifier> ?author_id.
+            }}
+        }}
+        """
+        person_df = self.execute_sparql_query(person_query)
+        object_df = self.execute_sparql_query(object_query)
+        if not object_df.empty:  # Retornar objetos se existirem
+            return object_df
+        return person_df  # Caso contrário, retornar pessoas ou vazio
+
+    def getAllPeople(self):
+        query = """
+        SELECT DISTINCT ?author_id ?author_name
+        WHERE {
+            ?object <http://purl.org/dc/terms/creator> ?author.
+            ?author <http://purl.org/dc/terms/identifier> ?author_id.
+            ?author <http://xmlns.com/foaf/0.1/name> ?author_name.
+        }
+        """
+        return self.execute_sparql_query(query)
+
+    def getAllCulturalHeritageObjects(self):
+        query = """
+        SELECT DISTINCT ?object ?id ?type ?title ?date ?owner ?place ?author ?author_name ?author_id 
+        WHERE { 
+            ?object <http://purl.org/dc/terms/identifier> ?id. 
+            ?object <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type. 
+            ?object <http://purl.org/dc/terms/title> ?title. 
+            ?object <http://xmlns.com/foaf/0.1/maker> ?owner. 
+            ?object <http://purl.org/dc/terms/spatial> ?place. 
+            OPTIONAL { ?object <http://schema.org/dateCreated> ?date. } 
+            OPTIONAL { 
+                ?object <http://purl.org/dc/terms/creator> ?author. 
+                ?author <http://xmlns.com/foaf/0.1/name> ?author_name. 
+                ?author <http://purl.org/dc/terms/identifier> ?author_id.
+            }
+        }
+        """
+        return self.execute_sparql_query(query)
+
+    def getAuthorsOfCulturalHeritageObject(self, object_id: str):
+        query = f"""
+        SELECT DISTINCT ?author ?author_name ?author_id 
+        WHERE {{ 
+            ?object <http://purl.org/dc/terms/identifier> '{object_id}'. 
+            ?object <http://purl.org/dc/terms/creator> ?author. 
+            ?author <http://xmlns.com/foaf/0.1/name> ?author_name. 
+            ?author <http://purl.org/dc/terms/identifier> ?author_id. 
+        }}
+        """
+        return self.execute_sparql_query(query)
+
+    def getCulturalHeritageObjectsAuthoredBy(self, personId: str):
+        query = f"""
+        SELECT DISTINCT ?object ?id ?type ?title ?date ?owner ?place ?author ?author_name ?author_id 
+        WHERE {{ 
+            ?object <http://purl.org/dc/terms/identifier> ?id. 
+            ?object <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type. 
+            ?object <http://purl.org/dc/terms/title> ?title. 
+            ?object <http://xmlns.com/foaf/0.1/maker> ?owner. 
+            ?object <http://purl.org/dc/terms/spatial> ?place. 
+            ?object <http://purl.org/dc/terms/creator> ?author. 
+            ?author <http://xmlns.com/foaf/0.1/name> ?author_name.
+            ?author <http://purl.org/dc/terms/identifier> ?author_id.
+            OPTIONAL {{ ?object <http://schema.org/dateCreated> ?date. }}
+            FILTER CONTAINS(?author_id, '{personId}')
+        }}
+        """
+        return self.execute_sparql_query(query)
+
+    
 activities = DataFrame()
 
 class ProcessDataQueryHandler(QueryHandler):
-    pass
+    def __init__(self, dbPathOrUrl: str = ""):
+        super().__init__(dbPathOrUrl)  # Ensure proper initialization
 
     def getAllActivities(self):
         
@@ -546,6 +754,10 @@ class ProcessDataQueryHandler(QueryHandler):
 
             query_exporting = "SELECT * FROM Exporting"
             exporting_sql_df = read_sql(query_exporting, con)
+
+            query_tool = "SELECT * FROM Tools"
+            tool_sql_df = read_sql(query_tool, con)
+
 
         activities = concat([acquisition_sql_df, processing_sql_df, modelling_sql_df, optimising_sql_df, exporting_sql_df], ignore_index=True)
         return activities
@@ -574,10 +786,10 @@ class ProcessDataQueryHandler(QueryHandler):
                     # exact match
                     if partialName.lower() == person.lower():
                         # use backticks to refer to column names containing spaces and @ for variables
-                        person_df = activities.query("`responsible institute` == @person")
+                        person_df = activities.query("`responsible person` == @person")
                     # partial match
                     elif partialName.lower() in person.lower():
-                        person_df = activities.query("`responsible institute` == @person")
+                        person_df = activities.query("`responsible person` == @person")
 
         return person_df
     
@@ -594,65 +806,115 @@ class ProcessDataQueryHandler(QueryHandler):
         end_date_df = DataFrame()
         for idx, row in activities.iterrows():
             for column_name, item in row.items():
-                if column_name == "end date": end_date_df = activities.query("`end date` <= @date and `end date` != ''")
+                if column_name == "end date":
+                    end_date_df = activities.query("`end date` <= @date and `end date` != ''")
         
         return end_date_df
+
     
-class BasicMashup:
+    def getAcquisitionsByTechnique(self, inputtechnique):
+        technique_df = DataFrame()
+        for idx, row in acquisition_sql_df.iterrows():
+            for column_name, technique in row.items():
+                if column_name == "technique":
+                    # exact match
+                    if inputtechnique.lower() == technique.lower():
+                    # use backticks to refer to column names containing spaces and @ for variables
+                        technique_df = acquisition_sql_df.query("technique` == @technique")
+                    # partial match
+                    elif inputtechnique.lower() in technique.lower():
+                        technique_df = acquisition_sql_df.query("`technique` == @technique")
+                    
+        return technique_df
+    
+
+    def getActivitiesUsingTool(self, tool):
+        activities_with_tool = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
+        activities_tool = DataFrame()    
+        for idx, row in activities_with_tool.iterrows():
+            for column_name, value in row.items():
+                if column_name == "tool":
+                # Corrispondenza esatta
+                    if value.lower() == tool.lower():
+                        activities_tool = activities.query("`tool` == @tool")
+                # Corrispondenza parziale
+                    elif tool.lower() in value.lower():
+                        activities_tool = activities.query("`tool` == @tool")
+    
+        return activities_tool
+
+class BasicMashup(object):
     def __init__(self, metadataQuery=None, processQuery=None):
-        self.metadataQuery = metadataQuery if metadataQuery is not None else []  # Initialize metadataQuery as a list of MetadataQueryHandler
-        self.processQuery = processQuery if processQuery is not None else []     # Initialize processQuery as a list of ProcessorDataQueryHandler
+        self.metadataQuery = metadataQuery if metadataQuery is not None else []  # List of MetadataQueryHandler objects
+        self.processQuery = processQuery if processQuery is not None else []     # List of ProcessDataQueryHandler objects
 
     def cleanMetadataHandlers(self) -> bool:
-        self.metadataQuery.clear()  # Clear the list of metadataQuery handlers
+        """Cleans the list of MetadataQueryHandler objects."""
+        self.metadataQuery.clear()
         return True
 
     def cleanProcessHandlers(self) -> bool:
-        self.processQuery.clear()  # Clear the list of processQuery handlers
+        """Cleans the list of ProcessDataQueryHandler objects."""
+        self.processQuery.clear()
         return True
 
-    def addMetadataHandler(self, handler) -> bool:
-        if handler not in self.metadataQuery:  # Add a MetadataQueryHandler object to the metadataQuery list if not already present
+    def addMetadataHandler(self, handler: MetadataQueryHandler) -> bool:
+        """Adds a MetadataQueryHandler to the list, if not already present."""
+        if handler not in self.metadataQuery:
             self.metadataQuery.append(handler)
             return True
         return False
 
-    def addProcessHandler(self, handler) -> bool:
-        if handler not in self.processQuery:  # Add a ProcessorDataQueryHandler object to the processQuery list if not already present
+    def addProcessHandler(self, handler: ProcessDataQueryHandler) -> bool:
+        """Adds a ProcessDataQueryHandler to the list, if not already present."""
+        if handler not in self.processQuery:
             self.processQuery.append(handler)
             return True
         return False
 
     def _createEntityObject(self, entity_data: dict) -> IdentifiableEntity:
-        type_class_map = {  # Map entity types to their corresponding classes
+        type_class_map = {
             "Nautical_chart": NauticalChart,
             "Manuscript_plate": ManuscriptPlate,
-            "Manuscript_volume": ManuscriptVolume,
-            "Printed_volume": PrintedVolume,
-            "Printed_material": PrintedMaterial,
-            "Herbarium": Herbarium,
-            "Specimen": Specimen,
-            "Painting": Painting,
-            "Model": Model,
             "Map": Map,
             "Person": Person,
-            "Author": Author,
         }
-        entity_type = entity_data.get("type", None)  # Get the type of the entity from the data
-        entity_id = entity_data.get("id")  # Get the ID of the entity from the data
-        if entity_type in type_class_map:  # Check if the type is in the mapping and create an instance dynamically
-            cls = type_class_map[entity_type]
-            return cls(**entity_data)
-        else:  # Return a default IdentifiableEntity instance if no matching type is found
-            return IdentifiableEntity(entity_id)
+        entity_type = entity_data.get("type")
+        entity_id = entity_data.get("id")
+        return type_class_map.get(entity_type, IdentifiableEntity)(**entity_data)
 
     def _createObjectList(self, df: pd.DataFrame) -> List[IdentifiableEntity]:
-        object_list = []  # Initialize an empty list for storing objects
-        for _, row in df.iterrows():  # Iterate over rows in the DataFrame
-            entity_data = row.to_dict()  # Convert each row to a dictionary
-            obj = self._createEntityObject(entity_data)  # Create an object using _createEntityObject
-            object_list.append(obj)  # Append the created object to the list
+        object_list = []
+        for _, row in df.iterrows():
+            entity_data = row.to_dict()
+            obj = self._createEntityObject(entity_data)
+            object_list.append(obj)
         return object_list
+
+    def getAllCulturalHeritageObjects(self) -> List[CulturalHeritageObject]:
+        cho_list = []
+        if self.metadataQuery:
+            new_object_df_list = []
+            for handler in self.metadataQuery:
+                try:
+                    new_object_df = handler.getAllCulturalHeritageObjects()
+                    if not new_object_df.empty:
+                        new_object_df_list.append(new_object_df)
+                except Exception as e:
+                    print(f"Error retrieving objects from handler: {e}")
+
+            if new_object_df_list:
+                try:
+                    merged_df = pd.concat(new_object_df_list, ignore_index=True).drop_duplicates(subset=["id"], keep="first")
+                    # Validate required columns
+                    required_columns = ["id", "type", "title"]
+                    if not all(col in merged_df.columns for col in required_columns):
+                        print(f"Error: Merged DataFrame is missing required columns: {required_columns}")
+                        return []
+                    cho_list = self._createObjectList(merged_df)
+                except Exception as e:
+                    print(f"Error processing merged DataFrames: {e}")
+        return cho_list
 
     def getEntityById(self, entity_id: str) -> Optional[IdentifiableEntity]:
         if not self.metadataQuery:  # Return None if no metadata handlers are available
@@ -680,25 +942,6 @@ class BasicMashup:
                 merged_df = pd.concat(new_person_df_list, ignore_index=True).drop_duplicates(subset=["personID"], keep="first")  # Merge and deduplicate DataFrames
                 person_list = [Person(row["personID"], row["personName"]) for _, row in merged_df.iterrows() if row["personID"].strip() and row["personName"].strip()]  # Create Person objects from rows
         return person_list
-
-    def getAllCulturalHeritageObjects(self) -> List[CulturalHeritageObject]:
-        cho_list = []  # Initialize an empty list for storing cultural heritage objects
-        if self.metadataQuery:  # Check if there are any metadata handlers available
-            new_object_df_list = []  # Initialize a list to store DataFrames from handlers
-            for handler in self.metadataQuery:  # Iterate over metadata handlers to retrieve objects
-                try:
-                    new_object_df = handler.getAllCulturalHeritageObjects()
-                    if not new_object_df.empty:  # Add non-empty DataFrames to the list
-                        new_object_df_list.append(new_object_df)
-                except Exception as e:  # Print an error message if retrieval fails
-                    print(f"Error retrieving cultural heritage objects from handler {handler}: {e}")
-            if new_object_df_list:  # Proceed only if there are valid DataFrames to merge and process
-                try:
-                    merged_df = pd.concat(new_object_df_list, ignore_index=True).drop_duplicates(subset=["id"], keep="first")  # Merge and deduplicate DataFrames
-                    cho_list = self._createObjectList(merged_df)  # Create objects using _createObjectList
-                except Exception as e:  # Print an error message if merging or processing fails
-                    print(f"Error merging or processing the DataFrames: {e}")
-        return cho_list
 
     def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> List[Person]:
         author_list = []  # Initialize an empty list for storing authors (Person objects)
@@ -851,7 +1094,7 @@ def instantiateClass(activity_df):
                 if tools_row["unique_id"] != act_row["unique_id"]:
                     tools_df_sql.drop(tools_idx)
     
-    merged_df = merge(activity_df, tools_df_sql, left_on="unique_id", right_on="unique_id")
+    merged_df = pd.merge(activity_df, tools_df_sql, left_on="unique_id", right_on="unique_id")
 
     for idx, row in merged_df.iterrows():
         activity_from_id = re.sub("_\\d+", "", row["unique_id"])
@@ -866,69 +1109,112 @@ def instantiateClass(activity_df):
     return activity_list
 
 class AdvancedMashup(BasicMashup):
-    
+    def __init__(self):
+        super().__init__()  # Inherit initialization from BasicMashup
+
     def getActivitiesOnObjectsAuthoredBy(self, person_id: str):
-        activities = []  # Initialize a list to store activities
-        
-        # Check if person_id or the queries are empty
-        if not person_id or not self.processQuery or not self.metadataQuery:
-            return activities  # Return an empty list if no person_id or queries are present
-        
-        # Get all cultural heritage objects authored by the person
+        """Retrieve activities related to cultural heritage objects authored by a specific person."""
+        activities = []
+
+        # Validate inputs
+        if not person_id or not self.metadataQuery or not self.processQuery:
+            print("Error: Missing person_id, metadataQuery, or processQuery.")
+            return activities
+
+        # Retrieve cultural heritage objects authored by the person
         authored_objects = []
         for metadata_handler in self.metadataQuery:
-            authored_objects.extend(metadata_handler.getCulturalHeritageObjectsAuthoredBy(person_id))
-        
-        # If there are no authored objects, return an empty list
+            try:
+                authored_objects.extend(metadata_handler.getCulturalHeritageObjectsAuthoredBy(person_id))
+            except Exception as e:
+                print(f"Error querying authored objects from metadata handler: {e}")
+
         if not authored_objects:
-            return activities
-        
-        # Get all activities
+            return activities  # No authored objects found, return empty list
+
+        # Retrieve all activities
         all_activities = []
         for process_handler in self.processQuery:
-            all_activities.extend(process_handler.getAllActivities())
-        
-        # Create a list of related object IDs from the authored objects
-        authored_object_ids = [ch_object.getId() for ch_object in authored_objects]
-        
-        # Iterate over all activities and check if they relate to any authored object
+            try:
+                all_activities.extend(process_handler.getAllActivities())
+            except Exception as e:
+                print(f"Error querying activities from process handler: {e}")
+
+        # Match activities to authored objects
+        authored_object_ids = {obj.getId() for obj in authored_objects}
         for activity in all_activities:
-            related_object_ids = activity.getRelatedObjectIds()
-            
-            # If the activity is related to any authored object, add it to the list
-            if any(object_id in related_object_ids for object_id in authored_object_ids):
+            if any(object_id in activity.getRelatedObjectIds() for object_id in authored_object_ids):
                 activities.append(activity)
-        
+
         return activities
-    
+
     def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:
+        """Retrieve cultural heritage objects involved in activities handled by a specific person."""
         objects_list = []
 
-        # Check if partialName or the queries are empty
+        # Validate input
         if not partialName or not self.processQuery or not self.metadataQuery:
-            return objects_list  # Return an empty list
-        else:
-            # Get the activities of the responsible person with a partial name match
-            activities = self.getActivitiesByResponsiblePerson(partialName)
-        
-        # Get all cultural heritage objects
-        object_list = self.getAllCulturalHeritageObjects()
-        
-        # Create an empty list for object IDs
-        object_ids_list = []
-        
-        # Iterate over the activities to extract object IDs
-        for activity in activities:
-            # Extract the ID from the referenced object
-            object_id = activity.refersTo_cho.id
-            # Add the ID to the object_ids list if it's not already there
-            if object_id not in object_ids_list:
-                object_ids_list.append(object_id)
-        
-        # Add the objects to the list, avoiding duplicates
-        for cho in object_list:
-            # If the object's ID is in object_ids, add it to the result list
-            if cho.id in object_ids_list and cho not in objects_list:
+            return objects_list
+
+        # Retrieve activities by responsible person
+        activities = self.getActivitiesByResponsiblePerson(partialName)
+
+        # Retrieve all cultural heritage objects
+        all_objects = self.getAllCulturalHeritageObjects()
+
+        # Match objects to activities
+        object_ids = {activity.refersTo_cho.id for activity in activities if activity.refersTo_cho}
+        for cho in all_objects:
+            if cho.id in object_ids:
                 objects_list.append(cho)
-    
+
         return objects_list
+
+    def getObjectsHandledByResponsibleInstitution(self, institution: str) -> list[CulturalHeritageObject]:
+        """Retrieve cultural heritage objects involved in activities handled by a specific institution."""
+        objects_list = []
+
+        # Validate input
+        if not institution or not self.processQuery or not self.metadataQuery:
+            return objects_list
+
+        # Retrieve activities by responsible institution
+        activities = self.getActivitiesByResponsibleInstitution(institution)
+
+        # Retrieve all cultural heritage objects
+        all_objects = self.getAllCulturalHeritageObjects()
+
+        # Match objects to activities
+        object_ids = {activity.refersTo_cho.id for activity in activities if activity.refersTo_cho}
+        for cho in all_objects:
+            if cho.id in object_ids:
+                objects_list.append(cho)
+
+        return objects_list
+
+    def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> list[Person]:
+        """Retrieve authors of cultural heritage objects acquired within a specific timeframe."""
+        authors = []
+
+        # SPARQL query logic goes here
+        # Ensure that the logic matches your database and query mechanism.
+
+        # Example:
+        endpoint = "http://10.201.7.18:9999/blazegraph/sparql"  # Replace with your endpoint
+        sparql_query = f"""
+            PREFIX dcterms: <http://purl.org/dc/terms/>
+            PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+            
+            SELECT ?object ?author ?name 
+            WHERE {{
+                ?author dcterms:creator ?object .
+                ?author foaf:name ?name .
+            }}
+        """
+        try:
+            authors_cho_df = get(endpoint, sparql_query, True)
+            # Implement the merging logic with relational data based on your schema.
+        except Exception as e:
+            print(f"Error during SPARQL or SQL execution: {e}")
+
+        return authors
