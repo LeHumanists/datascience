@@ -29,10 +29,10 @@ class TestProjectBasic(unittest.TestCase):
     # the SPARQL endpoint must be updated depending on how you launch it - currently, it is
     # specified the URL introduced during the course, which is the one used for a standard
     # launch of the database.
-    metadata = "data" + sep + "data/meta.csv"
-    process = "data" + sep + "data/process.json"
-    relational = "." + sep + "relational.db"
-    graph = "http://10.201.30.19:9999/blazegraph/"
+    metadata = "data" + sep + "meta.csv"
+    process = "data" + sep + "process.json"
+    relational = "relational.db"
+    graph = "http://192.168.1.100:9999/blazegraph/sparql"
     
     def test_01_MetadataUploadHandler(self):
         u = MetadataUploadHandler()

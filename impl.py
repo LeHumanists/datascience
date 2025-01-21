@@ -202,8 +202,6 @@ class ResourceURIs:
     Model = URIRef("https://dbpedia.org/resource/Category:Prototypes")
     Map = URIRef("https://dbpedia.org/resource/Category:Maps")
 
-
-
 class MetadataUploadHandler(UploadHandler):
     def __init__(self):
         super().__init__()
@@ -212,6 +210,20 @@ class MetadataUploadHandler(UploadHandler):
         self.schema = Namespace("http://schema.org/")
         self.my_graph.bind("example", self.example)
         self.my_graph.bind("schema", self.schema)
+
+        # Mapeamento de tipos como atributo da classe
+        self.type_mapping = {
+            "Nautical chart": ResourceURIs.NauticalChart,
+            "Manuscript plate": ResourceURIs.ManuscriptPlate,
+            "Manuscript volume": ResourceURIs.ManuscriptVolume,
+            "Printed volume": ResourceURIs.PrintedVolume,
+            "Printed material": ResourceURIs.PrintedMaterial,
+            "Herbarium": ResourceURIs.Herbarium,
+            "Specimen": ResourceURIs.Specimen,
+            "Painting": ResourceURIs.Painting,
+            "Model": ResourceURIs.Model,
+            "Map": ResourceURIs.Map,
+        }
 
     def pushDataToDb(self, file_path: str) -> bool:
         """
@@ -246,27 +258,15 @@ class MetadataUploadHandler(UploadHandler):
         subj = URIRef(self.example + str(row["Id"]))
         self.my_graph.add((subj, DCTERMS.identifier, Literal(row["Id"])))
 
-        # Type mapping
-        type_mapping = {
-            "Nautical chart": ResourceURIs.NauticalChart,
-            "Manuscript plate": ResourceURIs.ManuscriptPlate,
-            "Manuscript volume": ResourceURIs.ManuscriptVolume,
-            "Printed volume": ResourceURIs.PrintedVolume,
-            "Printed material": ResourceURIs.PrintedMaterial,
-            "Herbarium": ResourceURIs.Herbarium,
-            "Specimen": ResourceURIs.Specimen,
-            "Painting": ResourceURIs.Painting,
-            "Model": ResourceURIs.Model,
-            "Map": ResourceURIs.Map,
-        }
-        if row.get("Type", "").strip() in type_mapping:
-            self.my_graph.add((subj, RDF.type, type_mapping[row["Type"].strip()]))
+        # Use o type_mapping como um atributo da classe
+        if row.get("Type", "").strip() in self.type_mapping:
+            self.my_graph.add((subj, RDF.type, self.type_mapping[row["Type"].strip()]))
 
         # Add additional properties
         if pd.notna(row.get("Title")):
             self.my_graph.add((subj, DCTERMS.title, Literal(row["Title"].strip())))
         if pd.notna(row.get("Date")):
-            self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.date)))
+            self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.str)))
         if pd.notna(row.get("Owner")):
             self.my_graph.add((subj, FOAF.maker, Literal(row["Owner"].strip())))
         if pd.notna(row.get("Place")):
@@ -288,7 +288,7 @@ class MetadataUploadHandler(UploadHandler):
         except Exception as e:
             print(f"Error uploading to Blazegraph: {e}")
             return False
-
+        
 class ProcessDataUploadHandler(UploadHandler):
     pass
 
@@ -734,10 +734,11 @@ class MetadataQueryHandler(QueryHandler):
 activities = DataFrame()
 acquisition_sql_df = DataFrame()
 tool_sql_df= DataFrame()
+acquisition_sql_df = DataFrame()
+tool_sql_df= DataFrame()
 
 class ProcessDataQueryHandler(QueryHandler):
-    def __init__(self, dbPathOrUrl: str = ""):
-        super().__init__(dbPathOrUrl)  # Ensure proper initialization
+    pass
 
     def getAllActivities(self):
         with connect("relational.db") as con:
@@ -827,95 +828,78 @@ class ProcessDataQueryHandler(QueryHandler):
                         technique_df = acquisition_sql_df.query("`technique` == @technique")
                     
         return technique_df
-    
 
     def getActivitiesUsingTool(self, tool):
-        activities_with_tool = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
-        activities_tool = DataFrame()    
-        for idx, row in activities_with_tool.iterrows():
-            for column_name, value in row.items():
-                if column_name == "tool":
-                # Corrispondenza esatta
-                    if value.lower() == tool.lower():
-                        activities_tool = activities.query("`tool` == @tool")
-                # Corrispondenza parziale
-                    elif tool.lower() in value.lower():
-                        activities_tool = activities.query("`tool` == @tool")
+
+        # Merge  the activities DataFrame  with the tool DataFrame
+        #activities_with_tool = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
+        activities = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
+    
+        # Normalize the tool string for comparison
+        tool_lower = tool.lower()
+    
+        # Filter rows where the tool column matches the exact or partial tool name
+        activities_tool = activities[
+            activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)
+        ]
     
         return activities_tool
 
-class BasicMashup(object):
+class BasicMashup:
     def __init__(self, metadataQuery=None, processQuery=None):
-        self.metadataQuery = metadataQuery if metadataQuery is not None else []  # List of MetadataQueryHandler objects
-        self.processQuery = processQuery if processQuery is not None else []     # List of ProcessDataQueryHandler objects
+        self.metadataQuery = metadataQuery if metadataQuery is not None else []  # Initialize metadataQuery as a list of MetadataQueryHandler
+        self.processQuery = processQuery if processQuery is not None else []     # Initialize processQuery as a list of ProcessorDataQueryHandler
+
+        # Mapping object types to their corresponding subclasses
+        self.type_mapping = {
+            "Nautical chart": NauticalChart,
+            "Manuscript plate": ManuscriptPlate,
+            "Manuscript volume": ManuscriptVolume,
+            "Printed volume": PrintedVolume,
+            "Printed material": PrintedMaterial,
+            "Herbarium": Herbarium,
+            "Specimen": Specimen,
+            "Painting": Painting,
+            "Model": Model,
+            "Map": Map,
+        }
 
     def cleanMetadataHandlers(self) -> bool:
-        """Cleans the list of MetadataQueryHandler objects."""
-        self.metadataQuery.clear()
+        self.metadataQuery.clear()  # Clear the list of metadataQuery handlers
         return True
 
     def cleanProcessHandlers(self) -> bool:
-        """Cleans the list of ProcessDataQueryHandler objects."""
-        self.processQuery.clear()
+        self.processQuery.clear()  # Clear the list of processQuery handlers
         return True
 
-    def addMetadataHandler(self, handler: MetadataQueryHandler) -> bool:
-        """Adds a MetadataQueryHandler to the list, if not already present."""
-        if handler not in self.metadataQuery:
+    def addMetadataHandler(self, handler) -> bool:
+        if handler not in self.metadataQuery:  # Add a MetadataQueryHandler object to the metadataQuery list if not already present
             self.metadataQuery.append(handler)
             return True
         return False
 
-    def addProcessHandler(self, handler: ProcessDataQueryHandler) -> bool:
-        """Adds a ProcessDataQueryHandler to the list, if not already present."""
-        if handler not in self.processQuery:
+    def addProcessHandler(self, handler) -> bool:
+        if handler not in self.processQuery:  # Add a ProcessorDataQueryHandler object to the processQuery list if not already present
             self.processQuery.append(handler)
             return True
         return False
 
     def _createEntityObject(self, entity_data: dict) -> IdentifiableEntity:
-        type_class_map = {
-            "Nautical_chart": NauticalChart,
-            "Manuscript_plate": ManuscriptPlate,
-            "Map": Map,
-            "Person": Person,
-        }
-        entity_type = entity_data.get("type")
-        entity_id = entity_data.get("id")
-        return type_class_map.get(entity_type, IdentifiableEntity)(**entity_data)
+        entity_type = entity_data.get("type", None)  # Get the type of the entity from the data
+        entity_id = entity_data.get("id")  # Get the ID of the entity from the data
+        if entity_type in self.type_mapping:  # Check if the type is in the mapping and create an instance dynamically
+            cls = self.type_mapping[entity_type]
+            return cls(**entity_data)
+        else:  # Return a default IdentifiableEntity instance if no matching type is found
+            return IdentifiableEntity(entity_id)
 
     def _createObjectList(self, df: pd.DataFrame) -> List[IdentifiableEntity]:
-        object_list = []
-        for _, row in df.iterrows():
-            entity_data = row.to_dict()
-            obj = self._createEntityObject(entity_data)
-            object_list.append(obj)
+        object_list = []  # Initialize an empty list for storing objects
+        for _, row in df.iterrows():  # Iterate over rows in the DataFrame
+            entity_data = row.to_dict()  # Convert each row to a dictionary
+            obj = self._createEntityObject(entity_data)  # Create an object using _createEntityObject
+            object_list.append(obj)  # Append the created object to the list
         return object_list
-
-    def getAllCulturalHeritageObjects(self) -> List[CulturalHeritageObject]:
-        cho_list = []
-        if self.metadataQuery:
-            new_object_df_list = []
-            for handler in self.metadataQuery:
-                try:
-                    new_object_df = handler.getAllCulturalHeritageObjects()
-                    if not new_object_df.empty:
-                        new_object_df_list.append(new_object_df)
-                except Exception as e:
-                    print(f"Error retrieving objects from handler: {e}")
-
-            if new_object_df_list:
-                try:
-                    merged_df = pd.concat(new_object_df_list, ignore_index=True).drop_duplicates(subset=["id"], keep="first")
-                    # Validate required columns
-                    required_columns = ["id", "type", "title"]
-                    if not all(col in merged_df.columns for col in required_columns):
-                        print(f"Error: Merged DataFrame is missing required columns: {required_columns}")
-                        return []
-                    cho_list = self._createObjectList(merged_df)
-                except Exception as e:
-                    print(f"Error processing merged DataFrames: {e}")
-        return cho_list
 
     def getEntityById(self, entity_id: str) -> Optional[IdentifiableEntity]:
         if not self.metadataQuery:  # Return None if no metadata handlers are available
@@ -944,43 +928,119 @@ class BasicMashup(object):
                 person_list = [Person(row["personID"], row["personName"]) for _, row in merged_df.iterrows() if row["personID"].strip() and row["personName"].strip()]  # Create Person objects from rows
         return person_list
 
-    def getAuthorsOfCulturalHeritageObject(self, objectId: str) -> List[Person]:
-        author_list = []  # Initialize an empty list for storing authors (Person objects)
-        if self.metadataQuery:  # Check if there are any metadata handlers available
-            new_person_df_list = []  # Initialize a list to store DataFrames from handlers
-            for handler in self.metadataQuery:  # Iterate over metadata handlers to retrieve authors of a specific object
-                try:
-                    new_person_df = handler.getAuthorsOfCulturalHeritageObject(objectId)
-                    if not new_person_df.empty:  # Add non-empty DataFrames to the list
-                        new_person_df_list.append(new_person_df)
-                except Exception as e:  # Print an error message if retrieval fails
-                    print(f"Error retrieving authors for object {objectId} from handler {handler}: {e}")
-            if new_person_df_list:  # Proceed only if there are valid DataFrames to merge and process
-                try:
-                    merged_df = pd.concat(new_person_df_list, ignore_index=True).drop_duplicates(subset=["author_id"], keep="first")  # Merge and deduplicate DataFrames
-                    author_list = [Person(row["author_id"], row["author_name"]) for _, row in merged_df.iterrows() if row["author_id"].strip() and row["author_name"].strip()]  # Create Person objects from rows
-                except Exception as e:  # Print an error message if merging or processing fails
-                    print(f"Error during merging or processing of DataFrames: {e}")
-        return author_list
+    def getAllCulturalHeritageObjects(self):
+        """
+        Returns a list of objects of the class CulturalHeritageObject (or its subclasses).
+        Integrates related person information into these objects.
+        """
+        # Ensure metadataQuery handlers are available
+        if not self.metadataQuery:
+            return []
 
-    def getCulturalHeritageObjectsAuthoredBy(self, AuthorId: str) -> List[CulturalHeritageObject]:
-        cho_list = []  # Initialize an empty list for storing cultural heritage objects authored by a specific author
-        if self.metadataQuery:  # Check if there are any metadata handlers available
-            new_object_df_list = []  # Initialize a list to store DataFrames from handlers 
-            for handler in self.metadataQuery:  # Iterate over metadata handlers to retrieve authored objects 
-                try:
-                    new_object_df = handler.getCulturalHeritageObjectsAuthoredBy(AuthorId)
-                    if not new_object_df.empty: 
-                        new_object_df_list.append(new_object_df)
-                except Exception as e:
-                    print(f"Error retrieving cultural heritage objects for AuthorId {AuthorId} from handler {handler}: {e}")
-            if new_object_df_list:
-                try:
-                    merged_df = pd.concat(new_object_df_list, ignore_index=True).drop_duplicates(subset=["id"], keep="first")
-                    cho_list = self._createObjectList(merged_df)
-                except Exception as e:
-                    print(f"Error during merging or processing of DataFrames: {e}")
-        return cho_list 
+        # List to collect DataFrames from handlers
+        df_list = []
+
+        # Iterate over metadata handlers to retrieve DataFrames
+        for handler in self.metadataQuery:
+            try:
+                df_objects = handler.getAllCulturalHeritageObjects()
+                if df_objects is not None and not df_objects.empty:
+                    df_list.append(df_objects)
+            except Exception as e:
+                print(f"Error retrieving objects from handler {handler}: {e}")
+
+        # If no data was retrieved, return an empty list
+        if not df_list:
+            return []
+
+        # Merge all DataFrames, remove duplicates, and handle missing values
+        df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
+
+        # List to store the created objects
+        cultural_heritage_objects = []
+
+        # Iterate through each row of the DataFrame
+        for _, row in df_union.iterrows():
+            obj_type = row['type']  # Get the object type
+
+            # Check if the type is mapped to a subclass
+            if obj_type in self.type_mapping:
+                # Retrieve the corresponding class
+                object_class = self.type_mapping[obj_type]
+
+                # Create an instance of the cultural heritage object
+                obj = object_class(
+                    id=str(row['id']),       # Object ID
+                    title=row['title'],      # Object title
+                    date=str(row['date']),   # Object date
+                    owner=row['owner'],      # Object owner
+                    place=row['place'],      # Object place
+                )
+                cultural_heritage_objects.append(obj)
+            else:
+                print(f"Warning: Object type {obj_type} not found in type mapping.")
+
+        return cultural_heritage_objects
+
+    def getCulturalHeritageObjectsAuthoredBy(self, authorId: str): 
+        # List to collect the final cultural heritage objects      
+        object_result_list = [] 
+    
+        # Check if there are any handlers to query
+        if not self.metadataQuery: 
+            return object_result_list  # Return an empty list if no handlers are available 
+    
+        # List to collect DataFrames to be merged
+        df_list = [] 
+    
+        # Iterate over each handler in self.metadataQuery
+        for handler in self.metadataQuery:  
+            # Retrieve cultural heritage objects authored by the given author
+            df_objects = handler.getCulturalHeritageObjectsAuthoredBy(authorId)  
+        
+            # If the DataFrame is not empty
+            if df_objects is not None and not df_objects.empty:  
+                # Combine author data with cultural heritage objects
+                df_object_update = self.combineAuthorsOfObjects(df_objects, handler)  
+            
+                # Add the processed DataFrame to the df_list
+                df_list.append(df_object_update)  
+        
+        # If df_list is empty, return it as an empty list
+        if not df_list:  
+            return object_result_list  
+    
+        # Merge all DataFrames into a single one, remove duplicates, and handle NaN values
+        df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
+    
+        # Iterate through each row of the merged DataFrame
+        for _, row in df_union.iterrows(): 
+            obj_type = row['type']  # Extract the object type from the 'type' column
+        
+            # Check if obj_type is in self.type_mapping
+            if obj_type in self.type_mapping: 
+                # Get the class associated with the object type
+                object_class = self.type_mapping[obj_type]  
+            
+                # Create the object using the corresponding class constructor
+                obj = object_class(  # Create the cultural heritage object using the corresponding class
+                    id=str(row['id']),  # Pass the object ID
+                    title=row['title'],  # Pass the object title
+                    date=str(row['date']),  # Pass the object date
+                    owner=row['owner'],  # Pass the object owner
+                    place=row['place'],  # Pass the object place
+                    authors=row['Authors']  # Pass the authors associated with the object
+                )
+                # Add the created object to the result list
+                object_result_list.append(obj)
+            else:
+                # If the object type is not present in self.type_mapping print a warning
+                print(f"Warning: No object type: {obj_type} found")  
+                
+                # Continue to the next row without interrupting the process
+                continue
+
+        return object_result_list  # Return the list of created objects
 
     # methods for relational db start here
     
@@ -990,11 +1050,16 @@ class BasicMashup(object):
 
             concat_df = concat(activities_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
+
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
         
         else:
             print("No processQueryHandler found")
         
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
         
 
     def getActivitiesByResponsibleInstitution(self, partialName):
@@ -1003,11 +1068,16 @@ class BasicMashup(object):
 
             concat_df = concat(act_by_inst_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
+
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
         
         else:
             print("No processQueryHandler found")
         
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
     def getActivitiesByResponsiblePerson(self, partialName):
@@ -1017,10 +1087,15 @@ class BasicMashup(object):
             concat_df = concat(act_by_pers_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
 
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
+
         else:
             print("No processQueryHandler found")
 
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
     def getActivitiesStartedAfter(self, date):
@@ -1030,10 +1105,15 @@ class BasicMashup(object):
             concat_df = concat(act_start_aft_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
 
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
+
         else:
             print("No processQueryHandler found")
-
-        return instantiateClass(concat_df_cleaned)
+        
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
     def getActivitiesEndedBefore(self, date):
@@ -1043,10 +1123,15 @@ class BasicMashup(object):
             concat_df = concat(act_end_before_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
 
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
+
         else:
             print("No processQueryHandler found")
 
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
     def getAcquisitionsByTechnique(self, inputtechnique):
@@ -1056,10 +1141,15 @@ class BasicMashup(object):
             concat_df = concat(act_by_technique_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
 
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
+
         else:
             print("No processQueryHandler found")
 
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
     def getActivitiesUsingTool(self, tool):
@@ -1069,10 +1159,15 @@ class BasicMashup(object):
             concat_df = concat(act_activities_tool_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
 
+            with connect("relational.db") as con:
+                query = "SELECT * FROM Tools"
+            tools_sql_df = read_sql(query, con)
+
         else:
             print("No processQueryHandler found")
 
-        return instantiateClass(concat_df_cleaned)
+        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
+        return instantiateClass(merged_df)
     
 
 def instantiateClass(activity_df):
@@ -1084,20 +1179,8 @@ def instantiateClass(activity_df):
         "optimising": Optimising,
         "exporting": Exporting
     }
-        
-    with connect("relational.db") as con:
-        query = "SELECT * FROM Tools"
-        tools_df_sql = read_sql(query, con)
 
-    if len(tools_df_sql) > len(activity_df):
-        for tools_idx, tools_row in tools_df_sql.iterrows():
-            for act_idx, act_row in activity_df.iterrows():
-                if tools_row["unique_id"] != act_row["unique_id"]:
-                    tools_df_sql.drop(tools_idx)
-    
-    merged_df = pd.merge(activity_df, tools_df_sql, left_on="unique_id", right_on="unique_id")
-
-    for idx, row in merged_df.iterrows():
+    for idx, row in activity_df.iterrows():
         activity_from_id = re.sub("_\\d+", "", row["unique_id"])
         if activity_from_id in activity_mapping.keys() and activity_from_id == "acquisition":
             activity_obj = Acquisition(row["responsible institute"], row["responsible person"], row["technique"], row["tool"], row["start date"], row["end date"], row["refers_to"])
@@ -1108,6 +1191,7 @@ def instantiateClass(activity_df):
             activity_list.append(activity_obj)
     
     return activity_list
+    
 
 class AdvancedMashup(BasicMashup):
     def __init__(self):
