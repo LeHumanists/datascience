@@ -1,3 +1,4 @@
+import ast
 import pandas as pd
 from pandas import DataFrame
 from pandas import Series
@@ -99,8 +100,9 @@ class ProcessDataUploadHandler(UploadHandler):
             for column_name, datatype in dtypes.items():
                 # if the column has datatype object...
                 if datatype == object:
-                    #... create a sub-dataframe containing the column and the unique_id and drop the multi-valued column from the dataframe
+                    #... create a sub-dataframe containing the column and the unique_id, associate a dtype to the column and drop the multi-valued column from the dataframe
                     multi_valued = process_df[["unique_id", column_name]]
+                    multi_valued[column_name].astype("object")
                     process_df.drop("tool", axis=1, inplace=True)
 
             # return the df and the popped column
@@ -114,28 +116,31 @@ class ProcessDataUploadHandler(UploadHandler):
         exporting_df, exporting_multi_valued = keep_single_valued(exporting_df)
         print("Acquisition df and multi-valued df:\n", acquisition_df, acquisition_multi_valued)
         print(acquisition_df.info())
+        print(acquisition_multi_valued.info())
         
         # create multi-valued attributes tables
         def create_multi_valued_tables(multi_valued_df):
             tools_dict = dict()
             for idx, row in multi_valued_df.iterrows():
                 # populate dictionary with unique identifiers as keys and lists of tools as values
-                tools_dict[row.iloc[0]] = row.iloc[1] # iloc to access values by position
+                #tools_dict[row.iloc[0]] = row.iloc[1] # iloc to access values by position
+                tools_dict[row.iloc[0]] = ast.literal_eval(row.iloc[1]) if isinstance(row.iloc[1], str) else row.iloc[1]
 
             print(tools_dict)
 
-            tools_dict = {key: [item.strip() for item in value.strip("[]").split(",") if item.strip()] for key, value in tools_dict.items()}
+            #tools_dict = {key: [item.strip() for item in value.strip("[]").split(",") if item.strip()] for key, value in tools_dict.items()}
+            #tools_dict = {key: [item for item in value if item] for key, value in tools_dict.items()}
 
-            tools = list(tools_dict.values())
-            identifiers = list(tools_dict.keys())
+            #tools = list(tools_dict.values())
+            #identifiers = list(tools_dict.keys())
             tools_unpacked = []
             identifiers_unpacked = []
 
-            print("The list of tools:\n", tools)
-            print("The list of identifiers:\n", identifiers)
+            #print("The list of tools:\n", tools)
+            #print("The list of identifiers:\n", identifiers)
 
             # iterate over each tool in the inner lists
-            for tool_list in tools:
+            for tool_list in tools_dict.values():
                 # and append it to the pandas series
                 if len(tool_list) < 1:
                     tools_unpacked.append("")
@@ -146,7 +151,7 @@ class ProcessDataUploadHandler(UploadHandler):
             print("list for tools:\n", tools_unpacked)
 
             # iterate over the list of identifiers
-            for identifier in identifiers:
+            for identifier in tools_dict.keys():
                 # and append each identifier to the series as many times as the length of the list which is the value of the key corresponding to the identifier in the tools_dict
                 """ if len(tools_dict[identifier]) < 1:
                     identifiers_unpacked.append(identifier)

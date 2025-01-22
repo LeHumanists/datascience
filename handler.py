@@ -1,5 +1,5 @@
 class Handler(object):
-    def __init__(self, dbPathOrUrl):
+    def __init__(self, dbPathOrUrl: str = ""):
         self.dbPathOrUrl = dbPathOrUrl
     
     def getDbPathOrUrl(self):

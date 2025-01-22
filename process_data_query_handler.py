@@ -31,12 +31,12 @@ class ProcessDataQueryHandler(QueryHandler):
                     print(f"Warning: {key} table is empty.")
 
         activities = concat([dfs["Acquisition"], dfs["Processing"], dfs["Modelling"], dfs["Optimising"], dfs["Exporting"]], ignore_index=True)
-        activities = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
+        activities = pd.merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
 
-        acquisition_sql_df = merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
+        
         print("Activities type:", type(activities))  # Debugging
         print("Acquisition type:", type(acquisition_sql_df))  # Debugging
-        return activities, acquisition_sql_df
+        return activities
 
 
     def getActivitiesByResponsibleInstitution(self, partialName):
@@ -89,6 +89,7 @@ class ProcessDataQueryHandler(QueryHandler):
 
     
     def getAcquisitionsByTechnique(self, inputtechnique):
+        acquisition_sql_df = pd.merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
         technique_df = DataFrame()
         for idx, row in acquisition_sql_df.iterrows():
             for column_name, technique in row.items():
@@ -104,10 +105,6 @@ class ProcessDataQueryHandler(QueryHandler):
         return technique_df
 
     def getActivitiesUsingTool(self, tool):
-
-        # Merge  the activities DataFrame  with the tool DataFrame
-        #activities_with_tool = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
-        activities = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
     
         # Normalize the tool string for comparison
         tool_lower = tool.lower()
@@ -119,6 +116,5 @@ class ProcessDataQueryHandler(QueryHandler):
     
         return activities_tool
         
-    
  
    
