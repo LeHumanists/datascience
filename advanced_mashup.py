@@ -119,11 +119,12 @@ class AdvancedMashup(BasicMashup):
         endpoint = "http://10.201.7.18:9999/blazegraph/sparql"
         sparql_query = """
         PREFIX dcterms: <http://purl.org/dc/terms>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
         SELECT ?object ?author ?name
         WHERE {
             ?author dcterms:creator ?object .
-            ?author foaf:name ?name
+            ?author foaf:name ?name .
         }
         """
 
@@ -134,28 +135,31 @@ class AdvancedMashup(BasicMashup):
         objects_id = []
         slug = ""
        
-        for _, row in authors_cho_df.iterrows():
-            slug = row["object"].split()[-1]
-            objects_id.append("object_" + slug)
+        for idx, row in authors_cho_df.iterrows(): # http://example.org/1
+            if row["object"]:
+                slug = row["object"].split("/")[-1]
+                objects_id.append("object_" + slug)
+            else:
+                print(f"Warning: No object associated to {authors_cho_df["author"].iloc[idx]}")
 
         authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
         print("dataframe with ids\n:", authors_cho_df)
         
         # sql query
         with connect("relational.db") as con:
-            sql_query = "SELECT start date, end date, refers_to FROM Acquisition" # check if it requires backticks for space separated column names
+            sql_query = "SELECT `start date`, `end date`, `refers_to` FROM Acquisition" 
             acq_timeframe_df = read_sql(sql_query, con)
         
         # merge resulting dataframes
-        merged = merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to")
+        merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
         print("Merged dataframe\n:", merged)
 
         # check for matching values in the merged df
         # exclude empty values
-        if (not merged["start date"].isna()) & (merged["end date"] != ""):
-            result_df = merged[(merged["start date"] >= start) & merged("end date") <= end]
+        if (merged["start date"].notna().notna().all()) & (merged["end date"].notna().all()):
+            result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
 
         # extend the empty list with the objects of the class person compliant with the query
-        query_result = query_result.extend([Person(author) for author in result_df["name"]])
+        query_result.extend([Person(author) for author in result_df["name"]])
         
         return query_result

@@ -39,7 +39,7 @@ class ProcessDataQueryHandler(QueryHandler):
 
         
         print("Activities type:", type(activities))  # Debugging
-        print("Acquisition type:", type(acquisition_sql_df))  # Debugging
+        
         return activities
 
 
