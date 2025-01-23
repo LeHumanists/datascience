@@ -30,7 +30,7 @@ class ProcessDataQueryHandler(QueryHandler):
                 if dfs[key].empty:
                     print(f"Warning: {key} table is empty.")
 
-        activities = concat([dfs["Acquisition"], dfs["Processing"], dfs["Modelling"], dfs["Optimising"], dfs["Exporting"]], ignore_index=True)
+        activities = pd.concat([dfs["Acquisition"], dfs["Processing"], dfs["Modelling"], dfs["Optimising"], dfs["Exporting"]], ignore_index=True)
         activities = pd.merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
 
         
