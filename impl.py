@@ -489,7 +489,16 @@ class ProcessDataUploadHandler(UploadHandler):
 class QueryHandler(Handler):
     def __init__(self, dbPathOrUrl: str = ""):
         super().__init__(dbPathOrUrl)
+        
+    def getById(self, id: str):
+        pass 
 
+    
+class MetadataQueryHandler(QueryHandler):
+    def __init__(self):
+        # Inicializa a classe base sem um endpoint inicialmente
+        super().__init__()
+    
     def getById(self, id: str) -> DataFrame:
         """
         Retrieve data by its ID.
@@ -564,10 +573,6 @@ class QueryHandler(Handler):
             )
             return pd.DataFrame()
 
-class MetadataQueryHandler(QueryHandler):
-    def __init__(self):
-        # Inicializa a classe base sem um endpoint inicialmente
-        super().__init__()
 
     def execute_query(self, query: str) -> pd.DataFrame:
         """
@@ -679,6 +684,9 @@ tool_sql_df= DataFrame()
 class ProcessDataQueryHandler(QueryHandler):
     def __init__(self, dbPathOrUrl = ""):
         super().__init__(dbPathOrUrl)
+    
+    def getById(self, id: str) -> pd.DataFrame:
+        return pd.DataFrame()
 
     def getAllActivities(self):
         with connect("relational.db") as con:
@@ -707,34 +715,38 @@ class ProcessDataQueryHandler(QueryHandler):
 
     def getActivitiesByResponsibleInstitution(self, partialName):
         institution_df = DataFrame()
-        for idx, row in activities.iterrows(): # check if there is something to iterate over the rows without getting also the index
-            for column_name, item in row.items():
-                if column_name == "responsible institute":
-                    # exact match
-                    if partialName.lower() == item.lower():
-                    # use backticks to refer to column names containing spaces and @ for variables
-                        institution_df = activities.query("`responsible institute` == @item")
-                    # partial match
-                    elif partialName.lower() in item.lower():
-                        institution_df = activities.query("`responsible institute` == @item")
-                
+        # handle empty input strings
+        if not partialName:
+            institution_df = "No match found."
+        else:
+            # filter the df based on input string
+            cleaned_input = partialName.lower().strip()
+            institution_df = activities[activities["responsible institute"].str.lower().str.strip().str.contains(cleaned_input) | activities["responsible institute"].str.lower().str.strip().eq(cleaned_input)]
+
+    # handle non matching inputs
+            if institution_df.empty:
+                institution_df = "No match found."
+
         return institution_df
+    
     
     def getActivitiesByResponsiblePerson(self, partialName):
         person_df = DataFrame()
-        for idx, row in activities.iterrows():
-            for column_name, person in row.items():
-                if column_name == "responsible person":
-                    # exact match
-                    if partialName.lower() == person.lower():
-                        # use backticks to refer to column names containing spaces and @ for variables
-                        person_df = activities.query("`responsible person` == @person")
-                    # partial match
-                    elif partialName.lower() in person.lower():
-                        person_df = activities.query("`responsible person` == @person")
+        #handle empty input strings
+        if not partialName:
+            person_df = "No match found."
+        else:
+            #filter the df based on input string
+            cleaned_input = partialName.lower().strip()
+            person_df = activities[activities["responsible person"].str.lower().str.strip().str.contains(cleaned_input) | activities["responsible person"].str.lower().str.strip().eq(cleaned_input)]
+
+            # handle non matching inputs
+            if person_df.empty:
+                person_df = "No match found."
 
         return person_df
     
+
     def getActivitiesStartedAfter(self, date):
         start_date_df = DataFrame()
         for idx, row in activities.iterrows():
@@ -755,20 +767,16 @@ class ProcessDataQueryHandler(QueryHandler):
 
     
     def getAcquisitionsByTechnique(self, inputtechnique):
-        acquisition_sql_df = pd.merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
-        technique_df = DataFrame()
-        for idx, row in acquisition_sql_df.iterrows():
-            for column_name, technique in row.items():
-                if column_name == "technique":
-                    # exact match
-                    if inputtechnique.lower() == technique.lower():
-                    # use backticks to refer to column names containing spaces and @ for variables
-                        technique_df = acquisition_sql_df.query("technique` == @technique")
-                    # partial match
-                    elif inputtechnique.lower() in technique.lower():
-                        technique_df = acquisition_sql_df.query("`technique` == @technique")
+        # fetch Acquisition table
+        with connect("relational.db") as con:
+            query = "SELECT * FROM Acquisition"
+
+            acquisition_sql_df = read_sql(query, con)
+
+        merged_df = pd.merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
+        filtered_df = merged_df[merged_df["technique"].str.contains(inputtechnique, case=False, na=False)]
                     
-        return technique_df
+        return filtered_df
 
     def getActivitiesUsingTool(self, tool):
     
@@ -776,9 +784,7 @@ class ProcessDataQueryHandler(QueryHandler):
         tool_lower = tool.lower()
     
         # Filter rows where the tool column matches the exact or partial tool name
-        activities_tool = activities[
-            activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)
-        ]
+        activities_tool = activities[activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)]
     
         return activities_tool
     
@@ -967,56 +973,70 @@ class BasicMashup(object):
 
         # Collect data from each MetadataQueryHandler
         for handler in handler_list:
-            # Fetch cultural heritage objects authored by the given author ID
-            df_objects = handler.getCulturalHeritageObjectsAuthoredBy(authorId)
-            
-            # Fetch authors related to the objects
-            df_authors = handler.getAllPeople()
+            try:
+                # Fetch cultural heritage objects authored by the given author ID
+                df_objects = handler.getCulturalHeritageObjectsAuthoredBy(authorId)
+                
+                # Fetch authors related to the objects
+                df_authors = handler.getAllPeople()
 
-            # Combine object and author information
-            if not df_objects.empty and not df_authors.empty:
-                df_objects["Authors"] = df_objects["id"].map(
-                    lambda obj_id: ", ".join(
-                        df_authors[df_authors["objectID"] == obj_id]["name"].tolist()
-                    )
-                )
-            else:
-                df_objects["Authors"] = ""
+                # Combine object and author information
+                if df_objects is not None and not df_objects.empty:
+                    if df_authors is not None and not df_authors.empty:
+                        # Create a map of objectID to list of Author instances
+                        object_authors_map = {}
+                        for obj_id in df_objects["id"].unique():
+                            authors = df_authors[df_authors["objectID"] == obj_id]
+                            object_authors_map[obj_id] = [
+                                Author(name=row["name"], identifier=row["authorId"])
+                                for _, row in authors.iterrows()
+                            ]
+                        
+                        # Add the authors list to each row in df_objects
+                        df_objects["Authors"] = df_objects["id"].map(object_authors_map.get)
+                    else:
+                        df_objects["Authors"] = []
 
-            df_list.append(df_objects)
+                    df_list.append(df_objects)
+            except Exception as e:
+                print(f"Error retrieving objects from handler {handler}: {e}")
+
+        # If no data was retrieved, return an empty list
+        if not df_list:
+            return []
 
         # Combine all dataframes and remove duplicates
         df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
 
         # Create instances of appropriate classes
         for _, row in df_union.iterrows():
-            obj_type = row["type"]
+            obj_type = row.get("type")
 
-            # Map types to classes
-            if "NauticalChart" in obj_type:
-                object = NauticalChart(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "ManuscriptPlate" in obj_type:
-                object = ManuscriptPlate(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "ManuscriptVolume" in obj_type:
-                object = ManuscriptVolume(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Book" in obj_type:
-                object = PrintedVolume(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "PrintedMaterial" in obj_type:
-                object = PrintedMaterial(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Herbarium" in obj_type:
-                object = Herbarium(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Specimen" in obj_type:
-                object = Specimen(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Painting" in obj_type:
-                object = Painting(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Model" in obj_type:
-                object = Model(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Map" in obj_type:
-                object = Map(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
+            # Use type_mapping to map object types to classes
+            if obj_type in self.type_mapping:
+                try:
+                    # Get the class from the mapping
+                    object_class = self.type_mapping[obj_type]
+
+                    # Create an instance dynamically using the class and row data
+                    obj = object_class(
+                        id=str(row.get("id", "")),
+                        title=row.get("title", ""),
+                        date=str(row.get("date", "")),
+                        owner=row.get("owner", ""),
+                        place=row.get("place", ""),
+                    )
+
+                    # Add authors to the object
+                    authors = row.get("Authors", [])
+                    for author in authors:
+                        obj.addAuthor(author)
+
+                    result.append(obj)
+                except Exception as e:
+                    print(f"Error creating object of type {obj_type} with data {row}: {e}")
             else:
-                continue
-
-            result.append(object)
+                print(f"Warning: Object type {obj_type} not found in type mapping.")
 
         return result
 
