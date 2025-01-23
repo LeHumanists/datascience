@@ -171,15 +171,12 @@ class Exporting(Activity):
 
 class Handler(object):
     def __init__(self, dbPathOrUrl=""):
-        # Initialize the database path or URL
         self.dbPathOrUrl = dbPathOrUrl
 
     def getDbPathOrUrl(self):
-        # Return the configured database path or URL
         return self.dbPathOrUrl
 
     def setDbPathOrUrl(self, url):
-        # Set the database path or URL
         self.dbPathOrUrl = url
         return True  # Indicate success
 
@@ -188,8 +185,8 @@ class UploadHandler(Handler):
     def __init__(self, dbPathOrUrl=""):
         super().__init__(dbPathOrUrl)
     def pushDataToDb(self, file_path):
-        # Placeholder for data upload logic, to be implemented by subclasses
-        raise NotImplementedError("Subclasses must implement 'pushDataToDb'.")
+        pass
+    
     
 class ResourceURIs:
     NauticalChart = URIRef("https://dbpedia.org/resource/Nautical_chart")
@@ -269,6 +266,25 @@ class MetadataUploadHandler(UploadHandler):
             self.my_graph.add((subj, FOAF.maker, Literal(row["Owner"].strip())))
         if pd.notna(row.get("Place")):
             self.my_graph.add((subj, DCTERMS.spatial, Literal(row["Place"].strip())))
+            
+        # Process authors
+            authors = row["Author"].split(",") if isinstance(row["Author"], str) else []
+            for author_string in authors:
+                author_string = author_string.strip()
+                
+                # Use regex to find author ID with either VIAF or ULAN
+                author_id_match = re.search(r'\((VIAF|ULAN):(\d+)\)', author_string)  # Match both VIAF and ULAN formats
+                if author_id_match:
+                    id_type = author_id_match.group(1)  # Either 'VIAF' or 'ULAN'
+                    id_value = author_id_match.group(2)  # The numeric ID
+                    person_id = URIRef(f"http://example.org/person/{id_type}_{id_value}")
+                else:
+                    # Fallback to a simple URI based on the author's name if no ID is found
+                    person_id = URIRef(f"http://example.org/person/{author_string.replace(' ', '_')}")
+                
+                # Add the author information to the graph
+                self.my_graph.add((person_id, DCTERMS.creator, subj))
+                self.my_graph.add((person_id, FOAF.name, Literal(author_string, datatype=XSD.string)))
 
     def _uploadGraphToBlazegraph(self) -> bool:
         """Uploads the RDF graph to Blazegraph."""
