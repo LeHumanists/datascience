@@ -187,18 +187,6 @@ class UploadHandler(Handler):
     def pushDataToDb(self, file_path):
         pass
     
-    
-class ResourceURIs:
-    NauticalChart = URIRef("https://dbpedia.org/resource/Nautical_chart")
-    ManuscriptPlate = URIRef("http://example.org/ManuscriptPlate")
-    ManuscriptVolume = URIRef("https://dbpedia.org/resource/Category:Manuscripts_by_collection")
-    PrintedVolume = URIRef("https://schema.org/PublicationVolume")
-    PrintedMaterial = URIRef("http://example.org/PrintedMaterial")
-    Herbarium = URIRef("https://dbpedia.org/resource/Herbarium")
-    Specimen = URIRef("https://dbpedia.org/resource/Specimen")
-    Painting = URIRef("https://dbpedia.org/resource/Category:Painting")
-    Model = URIRef("https://dbpedia.org/resource/Category:Prototypes")
-    Map = URIRef("https://dbpedia.org/resource/Category:Maps")
 
 class MetadataUploadHandler(UploadHandler):
     def __init__(self):
@@ -211,22 +199,19 @@ class MetadataUploadHandler(UploadHandler):
 
         # Mapping types to URIs
         self.type_mapping = {
-            "Nautical chart": ResourceURIs.NauticalChart,
-            "Manuscript plate": ResourceURIs.ManuscriptPlate,
-            "Manuscript volume": ResourceURIs.ManuscriptVolume,
-            "Printed volume": ResourceURIs.PrintedVolume,
-            "Printed material": ResourceURIs.PrintedMaterial,
-            "Herbarium": ResourceURIs.Herbarium,
-            "Specimen": ResourceURIs.Specimen,
-            "Painting": ResourceURIs.Painting,
-            "Model": ResourceURIs.Model,
-            "Map": ResourceURIs.Map,
-        }
+            "Nautical chart": URIRef("https://dbpedia.org/resource/Nautical_chart"),
+            "Manuscript plate": URIRef("http://example.org/ManuscriptPlate"),
+            "Manuscript volume": URIRef("https://dbpedia.org/resource/Category:Manuscripts_by_collection"),
+            "Printed volume": URIRef("https://schema.org/PublicationVolume"),
+            "Printed material": URIRef("http://example.org/PrintedMaterial"),
+            "Herbarium": URIRef("https://dbpedia.org/resource/Herbarium"),
+            "Specimen": URIRef("https://dbpedia.org/resource/Specimen"),
+            "Painting": URIRef("https://dbpedia.org/resource/Category:Painting"),
+            "Model": URIRef("https://dbpedia.org/resource/Category:Prototypes"),
+            "Map": URIRef("https://dbpedia.org/resource/Category:Maps"),
+            }
 
     def pushDataToDb(self, file_path: str) -> bool:
-        """
-        Reads a CSV file and uploads its data to a graph database.
-        """
         if not os.path.exists(file_path):
             print(f"Error: File not found at {file_path}")
             return False
@@ -261,7 +246,7 @@ class MetadataUploadHandler(UploadHandler):
         if pd.notna(row.get("Title")):
             self.my_graph.add((subj, DCTERMS.title, Literal(row["Title"].strip())))
         if pd.notna(row.get("Date")):
-            self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.date)))
+            self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.string)))
         if pd.notna(row.get("Owner")):
             self.my_graph.add((subj, FOAF.maker, Literal(row["Owner"].strip())))
         if pd.notna(row.get("Place")):
@@ -512,14 +497,9 @@ class QueryHandler(Handler):
     
 class MetadataQueryHandler(QueryHandler):
     def __init__(self):
-        # Inicializa a classe base sem um endpoint inicialmente
         super().__init__()
     
     def getById(self, id: str) -> DataFrame:
-        """
-        Retrieve data by its ID.
-        Returns a DataFrame with all identifiable entities matching the input ID.
-        """
         object_query = f"""
         PREFIX schema: <https://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -588,7 +568,6 @@ class MetadataQueryHandler(QueryHandler):
                 f"Error executing SPARQL query on {self.dbPathOrUrl}:\nQuery: {query}\nError: {e}"
             )
             return pd.DataFrame()
-
 
     def execute_query(self, query: str) -> pd.DataFrame:
         """
