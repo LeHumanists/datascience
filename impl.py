@@ -185,6 +185,8 @@ class Handler(object):
 
 
 class UploadHandler(Handler):
+    def __init__(self, dbPathOrUrl=""):
+        super().__init__(dbPathOrUrl)
     def pushDataToDb(self, file_path):
         # Placeholder for data upload logic, to be implemented by subclasses
         raise NotImplementedError("Subclasses must implement 'pushDataToDb'.")
@@ -593,29 +595,7 @@ class MetadataQueryHandler(QueryHandler):
             logging.error(f"Error executing SPARQL query on {self.dbPathOrUrl}: {e}")
             return pd.DataFrame()
 
-    def getById(self, id: str) -> pd.DataFrame:
-        """
-        Retrieve data by its ID.
-        Returns a DataFrame with all identifiable entities matching the input ID.
-        """
-        query = f"""
-        PREFIX schema: <https://schema.org/>
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-
-        SELECT DISTINCT ?id ?type ?title ?dateCreated ?maker ?spatial
-        WHERE {{
-            ?object dcterms:identifier '{id}' .
-            ?object dcterms:identifier ?id .
-            ?object rdf:type ?type .
-            OPTIONAL {{ ?object dcterms:title ?title . }}
-            OPTIONAL {{ ?object schema:dateCreated ?dateCreated . }}
-            OPTIONAL {{ ?object foaf:maker ?maker . }}
-            OPTIONAL {{ ?object dcterms:spatial ?spatial . }}
-        }}
-        """
-        return self.execute_query(query)
-
+    
     def getAllPeople(self) -> pd.DataFrame:
         """
         Fetch all people from the database.
@@ -697,7 +677,8 @@ acquisition_sql_df = DataFrame()
 tool_sql_df= DataFrame()
 
 class ProcessDataQueryHandler(QueryHandler):
-    pass
+    def __init__(self, dbPathOrUrl = ""):
+        super().__init__(dbPathOrUrl)
 
     def getAllActivities(self):
         with connect("relational.db") as con:
@@ -801,7 +782,7 @@ class ProcessDataQueryHandler(QueryHandler):
     
         return activities_tool
     
-class BasicMashup:
+class BasicMashup(object):
     def __init__(self, metadataQuery=None, processQuery=None):
         self.metadataQuery = metadataQuery if metadataQuery is not None else []  # Initialize metadataQuery as a list of MetadataQueryHandler
         self.processQuery = processQuery if processQuery is not None else []     # Initialize processQuery as a list of ProcessorDataQueryHandler
@@ -937,70 +918,107 @@ class BasicMashup:
                 print(f"Warning: Object type {obj_type} not found in type mapping.")
 
         return cultural_heritage_objects
+    
+    def getAuthorsOfCulturalHeritageObject(self, id: str):
+        # Check if there are any available handlers
+        if not self.metadataQuery:
+            return []  # Return an empty list if there are no handlers available
+    
+        # List to store valid DataFrames retrieved from each handler
+        df_list = []
+    
+        # Iterate through the handlers to collect author data
+        for handler in self.metadataQuery:
+            # Retrieve the authors' data for the given object ID from the handler
+            df = handler.getAuthorsOfCulturalHeritageObject(id)
+        
+            # If the DataFrame is not empty, add it to the list
+            if df is not None and not df.empty:  # Check for None as well
+                df_list.append(df)
+    
+        # If there are no valid DataFrames, return an empty list
+        if not df_list:
+            return []
+    
+        # Concatenate the DataFrames, remove duplicates, and handle NaN values
+        df_union = pd.concat(df_list, ignore_index=True).drop_duplicates(subset=["authorId"]).fillna("")
+    
+        # List of authors (avoid empty or invalid authors)
+        author_result_list = []
+        for _, row in df_union.iterrows():
+            # Strip leading and trailing whitespace from the author's name
+            author = row['authorName'].strip()
+            # If the author name is empty, return None
+            if author == "":
+                return None
+            else:
+                # Create a Person object for the author using their ID and name
+                person = Person(id=str(row["authorId"]), name=author)
+                # Append the Person object to the result list
+                author_result_list.append(person)
+            
+        # Return the list of author objects
+        return author_result_list
 
-    def getCulturalHeritageObjectsAuthoredBy(self, id_type="VIAF", id_value=None):
-        """
-        Fetch all cultural heritage objects authored by a specific person.
+    def getCulturalHeritageObjectsAuthoredBy(self, authorId: str):       
+        result = []
+        handler_list = self.metadataQuery
+        df_list = []
 
-        Parameters:
-        - id_type: Type of the ID, e.g., "VIAF" or "ULAN". Defaults to "VIAF".
-        - id_value: The numeric value of the ID, e.g., "123456".
+        # Collect data from each MetadataQueryHandler
+        for handler in handler_list:
+            # Fetch cultural heritage objects authored by the given author ID
+            df_objects = handler.getCulturalHeritageObjectsAuthoredBy(authorId)
+            
+            # Fetch authors related to the objects
+            df_authors = handler.getAllPeople()
 
-        Returns:
-        - List of CulturalHeritageObject instances authored by the person.
-        """
-        if not id_value:
-            raise ValueError("id_value is required to identify the author.")
+            # Combine object and author information
+            if not df_objects.empty and not df_authors.empty:
+                df_objects["Authors"] = df_objects["id"].map(
+                    lambda obj_id: ", ".join(
+                        df_authors[df_authors["objectID"] == obj_id]["name"].tolist()
+                    )
+                )
+            else:
+                df_objects["Authors"] = ""
 
-        # Build the author URI
-        personID = f"http://example.org/person/{id_type}_{id_value}"
+            df_list.append(df_objects)
 
-        # SPARQL query to fetch cultural heritage objects authored by this person
-        query = f"""
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX schema: <http://schema.org/>
-        SELECT DISTINCT ?objectID ?title ?date ?owner ?place
-        WHERE {{
-            ?object dcterms:creator <{personID}> ;
-                    dcterms:identifier ?objectID ;
-                    dcterms:title ?title ;
-                    schema:dateCreated ?date ;
-                    foaf:maker ?owner ;
-                    dcterms:spatial ?place .
-        }}
-        """
+        # Combine all dataframes and remove duplicates
+        df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
 
-        # Execute the query and fetch results
-        results = self.execute_query(query)
-        if results.empty:
-            return []  # No objects found
+        # Create instances of appropriate classes
+        for _, row in df_union.iterrows():
+            obj_type = row["type"]
 
-        # Create Author instance
-        author_name_query = f"""
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-        SELECT DISTINCT ?name
-        WHERE {{
-            <{personID}> foaf:name ?name .
-        }}
-        """
-        author_results = self.execute_query(author_name_query)
-        author_name = author_results["name"][0] if not author_results.empty else "Unknown"
-        author = Author(name=author_name, identifier=id_value)
+            # Map types to classes
+            if "NauticalChart" in obj_type:
+                object = NauticalChart(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
+            elif "ManuscriptPlate" in obj_type:
+                object = ManuscriptPlate(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
+            elif "ManuscriptVolume" in obj_type:
+                object = ManuscriptVolume(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
+            elif "Book" in obj_type:
+                object = PrintedVolume(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
+            elif "PrintedMaterial" in obj_type:
+                object = PrintedMaterial(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
+            elif "Herbarium" in obj_type:
+                object = Herbarium(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
+            elif "Specimen" in obj_type:
+                object = Specimen(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
+            elif "Painting" in obj_type:
+                object = Painting(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
+            elif "Model" in obj_type:
+                object = Model(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
+            elif "Map" in obj_type:
+                object = Map(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
+            else:
+                continue
 
-        # Create CulturalHeritageObject instances
-        cultural_objects = []
-        for _, row in results.iterrows():
-            cultural_object = CulturalHeritageObject(
-                id=row["objectID"],
-                title=row["title"],
-                date=row["date"],
-                owner=row["owner"],
-                place=row["place"]
-            )
-            cultural_object.addAuthor(author)  # Link the author to the object
-            cultural_objects.append(cultural_object)
+            result.append(object)
 
-        return cultural_objects
+        return result
 
     # methods for relational db start here
     
