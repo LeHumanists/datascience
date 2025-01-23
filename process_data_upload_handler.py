@@ -123,21 +123,12 @@ class ProcessDataUploadHandler(UploadHandler):
             tools_dict = dict()
             for idx, row in multi_valued_df.iterrows():
                 # populate dictionary with unique identifiers as keys and lists of tools as values
-                #tools_dict[row.iloc[0]] = row.iloc[1] # iloc to access values by position
                 tools_dict[row.iloc[0]] = ast.literal_eval(row.iloc[1]) if isinstance(row.iloc[1], str) else row.iloc[1]
 
             print(tools_dict)
 
-            #tools_dict = {key: [item.strip() for item in value.strip("[]").split(",") if item.strip()] for key, value in tools_dict.items()}
-            #tools_dict = {key: [item for item in value if item] for key, value in tools_dict.items()}
-
-            #tools = list(tools_dict.values())
-            #identifiers = list(tools_dict.keys())
             tools_unpacked = []
             identifiers_unpacked = []
-
-            #print("The list of tools:\n", tools)
-            #print("The list of identifiers:\n", identifiers)
 
             # iterate over each tool in the inner lists
             for tool_list in tools_dict.values():
@@ -153,11 +144,6 @@ class ProcessDataUploadHandler(UploadHandler):
             # iterate over the list of identifiers
             for identifier in tools_dict.keys():
                 # and append each identifier to the series as many times as the length of the list which is the value of the key corresponding to the identifier in the tools_dict
-                """ if len(tools_dict[identifier]) < 1:
-                    identifiers_unpacked.append(identifier)
-                else:
-                    for n in range(len(tools_dict[identifier])):
-                        identifiers_unpacked.append(identifier) """
                 list_length = len(tools_dict[identifier])
                 if list_length < 1:
                     identifiers_unpacked.append(identifier)

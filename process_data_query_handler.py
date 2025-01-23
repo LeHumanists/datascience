@@ -41,17 +41,18 @@ class ProcessDataQueryHandler(QueryHandler):
 
     def getActivitiesByResponsibleInstitution(self, partialName):
         institution_df = DataFrame()
-        for idx, row in activities.iterrows(): # check if there is something to iterate over the rows without getting also the index
-            for column_name, item in row.items():
-                if column_name == "responsible institute":
-                    # exact match
-                    if partialName.lower() == item.lower():
-                    # use backticks to refer to column names containing spaces and @ for variables
-                        institution_df = activities.query("`responsible institute` == @item")
-                    # partial match
-                    elif partialName.lower() in item.lower():
-                        institution_df = activities.query("`responsible institute` == @item")
-                
+        # handle empty input strings
+        if not partialName:
+            institution_df = "No match found."
+        else:
+            # filter the df based on input string
+            cleaned_input = partialName.lower().strip()
+            institution_df = activities[activities["responsible institute"].str.lower().str.strip().str.contains(cleaned_input) | activities["responsible institute"].str.lower().str.strip().eq(cleaned_input)]
+
+    # handle non matching inputs
+            if institution_df.empty:
+                institution_df = "No match found."
+
         return institution_df
     
     def getActivitiesByResponsiblePerson(self, partialName):
@@ -89,20 +90,16 @@ class ProcessDataQueryHandler(QueryHandler):
 
     
     def getAcquisitionsByTechnique(self, inputtechnique):
-        acquisition_sql_df = pd.merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
-        technique_df = DataFrame()
-        for idx, row in acquisition_sql_df.iterrows():
-            for column_name, technique in row.items():
-                if column_name == "technique":
-                    # exact match
-                    if inputtechnique.lower() == technique.lower():
-                    # use backticks to refer to column names containing spaces and @ for variables
-                        technique_df = acquisition_sql_df.query("technique` == @technique")
-                    # partial match
-                    elif inputtechnique.lower() in technique.lower():
-                        technique_df = acquisition_sql_df.query("`technique` == @technique")
+        # fetch Acquisition table
+        with connect("relational.db") as con:
+            query = "SELECT * FROM Acquisition"
+
+            acquisition_sql_df = read_sql(query, con)
+
+        merged_df = pd.merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
+        filtered_df = merged_df[merged_df["technique"].str.contains(inputtechnique, case=False, na=False)]
                     
-        return technique_df
+        return filtered_df
 
     def getActivitiesUsingTool(self, tool):
     
@@ -110,11 +107,6 @@ class ProcessDataQueryHandler(QueryHandler):
         tool_lower = tool.lower()
     
         # Filter rows where the tool column matches the exact or partial tool name
-        activities_tool = activities[
-            activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)
-        ]
+        activities_tool = activities[activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)]
     
         return activities_tool
-        
- 
-   
