@@ -1,3 +1,4 @@
+import ast
 import pandas as pd
 import json  # Importazione del modulo standard json
 import pprint
@@ -336,13 +337,11 @@ class ProcessDataUploadHandler(UploadHandler):
         # function for populating dataframes from lists
         def populateDf(process_list): 
         
-            df = pd.DataFrame(process_list)
-            # iterate over columns in the df for associating datatype
-            for column_name, column in df.items():
-                if column_name == "tool":
-                    df = df.astype("string")
-                else:
-                    df = df.astype(dtype={"tool": "object"})
+            # assign datatype string to the entire dataframe
+            df = pd.DataFrame(process_list, dtype="string")
+            # then cast "tool" column to dtype object
+            df["tool"] = df["tool"].astype("object")
+            
             return df
 
         # function calls
@@ -358,7 +357,7 @@ class ProcessDataUploadHandler(UploadHandler):
         # create unique identifiers and append id column to df
         def createUniqueId(process_df, df_name):
             id = []
-            # iterate over dataframe rowa
+            # iterate over dataframe rows
             for idx, row in process_df.iterrows():
                 # at each iteration, append to the list a string composed by dataframe name + underscore + the index of the row to be used as unique identifier
                 id.append(str(df_name) + "_" + str(idx))
@@ -386,8 +385,10 @@ class ProcessDataUploadHandler(UploadHandler):
             for column_name, datatype in dtypes.items():
                 # if the column has datatype object...
                 if datatype == object:
-                    #... pop the column from the df
-                    multi_valued = process_df.pop(column_name)
+                    #... create a sub-dataframe containing the column and the unique_id, associate a dtype to the column and drop the multi-valued column from the dataframe
+                    multi_valued = process_df[["unique_id", column_name]]
+                    multi_valued[column_name].astype("object")
+                    process_df.drop("tool", axis=1, inplace=True)
 
             # return the df and the popped column
             return process_df, multi_valued
@@ -398,8 +399,70 @@ class ProcessDataUploadHandler(UploadHandler):
         modelling_df, modelling_multi_valued = keep_single_valued(modelling_df)
         optimising_df, optimising_multi_valued = keep_single_valued(optimising_df)
         exporting_df, exporting_multi_valued = keep_single_valued(exporting_df)
-        print("Acquisition df and multi-valued column:\n", acquisition_df, acquisition_multi_valued)
+        print("Acquisition df and multi-valued df:\n", acquisition_df, acquisition_multi_valued)
         print(acquisition_df.info())
+        print(acquisition_multi_valued.info())
+        
+        # create multi-valued attributes tables
+        def create_multi_valued_tables(multi_valued_df):
+            tools_dict = dict()
+            for idx, row in multi_valued_df.iterrows():
+                # populate dictionary with unique identifiers as keys and lists of tools as values
+                tools_dict[row.iloc[0]] = ast.literal_eval(row.iloc[1]) if isinstance(row.iloc[1], str) else row.iloc[1]
+
+            print(tools_dict)
+
+            tools_unpacked = []
+            identifiers_unpacked = []
+
+            # iterate over each tool in the inner lists
+            for tool_list in tools_dict.values():
+                # and append it to the pandas series
+                if len(tool_list) < 1:
+                    tools_unpacked.append("")
+                else:
+                    for t in tool_list:
+                        tools_unpacked.append(t)
+
+            print("list for tools:\n", tools_unpacked)
+
+            # iterate over the list of identifiers
+            for identifier in tools_dict.keys():
+                # and append each identifier to the series as many times as the length of the list which is the value of the key corresponding to the identifier in the tools_dict
+                list_length = len(tools_dict[identifier])
+                if list_length < 1:
+                    identifiers_unpacked.append(identifier)
+                else:
+                    for n in range(list_length):
+                        identifiers_unpacked.append(identifier)
+
+            print("list for identifiers:\n", identifiers_unpacked)
+
+            # create a list that contains the two series and join them in a dataframe where each series is a column
+            tools_series = pd.Series(tools_unpacked, dtype="string", name="tool")
+            identifiers_series = pd.Series(identifiers_unpacked, dtype="string", name="unique_id")
+            tools_df = pd.concat([identifiers_series, tools_series], axis=1)
+            print("The dataframe for tools:\n", tools_df)
+            
+            return tools_df
+
+        # function calls...
+        ac_tools_df = create_multi_valued_tables(acquisition_multi_valued)
+        pr_tools_df = create_multi_valued_tables(processing_multi_valued)
+        md_tools_df = create_multi_valued_tables(modelling_multi_valued)
+        op_tools_df = create_multi_valued_tables(optimising_multi_valued)
+        ex_tools_df = create_multi_valued_tables(exporting_multi_valued)
+
+        # function for merging tools-id tables
+        def merge_mv_tables(table_1, table_2, table_3, table_4, table_5):
+            merged = concat([table_1, table_2, table_3, table_4, table_5], ignore_index=True)
+
+            return merged
+        
+        # function calls
+        merged_tools_df = merge_mv_tables(ac_tools_df, pr_tools_df, md_tools_df, op_tools_df, ex_tools_df)
+        print("The merged dataframe:\n", merged_tools_df)
+        
         # pushing tables to db
         with connect("relational.db") as con:
             acquisition_df.to_sql("Acquisition", con, if_exists="replace", index=False)
@@ -407,6 +470,7 @@ class ProcessDataUploadHandler(UploadHandler):
             modelling_df.to_sql("Modelling", con, if_exists="replace", index=False)
             optimising_df.to_sql("Optimising", con, if_exists="replace", index=False)
             exporting_df.to_sql("Exporting", con, if_exists="replace", index=False)
+            merged_tools_df.to_sql("Tools", con, if_exists="replace", index=False)
         
             # check and return result
             rel_db_ac = pd.read_sql("SELECT * FROM Acquisition", con)
@@ -414,8 +478,9 @@ class ProcessDataUploadHandler(UploadHandler):
             rel_db_md = pd.read_sql("SELECT * FROM Modelling", con)
             rel_db_op = pd.read_sql("SELECT * FROM Optimising", con)
             rel_db_ex = pd.read_sql("SELECT * FROM Exporting", con)
+            rel_db_tl = pd.read_sql("SELECT * FROM Tools", con)
 
-            populated_tables = not any(df.empty for df in [rel_db_ac, rel_db_pr, rel_db_op, rel_db_md, rel_db_ex])
+            populated_tables = not any(df.empty for df in [rel_db_ac, rel_db_pr, rel_db_op, rel_db_md, rel_db_ex, rel_db_tl]) # add rel_db_tl
             print(populated_tables)
             return populated_tables
 
@@ -629,7 +694,7 @@ class MetadataQueryHandler(QueryHandler):
 
 activities = DataFrame()
 acquisition_sql_df = DataFrame()
-tool_sql_df = DataFrame()
+tool_sql_df= DataFrame()
 
 class ProcessDataQueryHandler(QueryHandler):
     pass
@@ -650,76 +715,90 @@ class ProcessDataQueryHandler(QueryHandler):
                 if dfs[key].empty:
                     print(f"Warning: {key} table is empty.")
 
-        # Modify the unique_id in the Tools table to ensure it's unique
-        dfs["Tools"]["unique_id"] = dfs["Tools"]["unique_id"].apply(lambda x: f"tool_{x}")
+        activities = concat([dfs["Acquisition"], dfs["Processing"], dfs["Modelling"], dfs["Optimising"], dfs["Exporting"]], ignore_index=True)
+        activities = pd.merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
 
-        # Combine all activities except Tools
-        activities = concat(
-            [dfs["Acquisition"], dfs["Processing"], dfs["Modelling"], dfs["Optimising"], dfs["Exporting"]],
-            ignore_index=True
-        )
-
-        # Merge activities with tools, using modified unique_id
-        activities = merge(activities, dfs["Tools"], left_on="unique_id", right_on="unique_id", how="left")
-
-        # Example merge with acquisition table for a specific use case
-        acquisition_sql_df = merge(dfs["Acquisition"], dfs["Tools"], on="unique_id", how="inner")
+        
         print("Activities type:", type(activities))  # Debugging
         print("Acquisition type:", type(acquisition_sql_df))  # Debugging
-        return activities, acquisition_sql_df
+        return activities
+
 
     def getActivitiesByResponsibleInstitution(self, partialName):
         institution_df = DataFrame()
-        for idx, row in activities.iterrows():
+        for idx, row in activities.iterrows(): # check if there is something to iterate over the rows without getting also the index
             for column_name, item in row.items():
                 if column_name == "responsible institute":
-                    # Exact match
+                    # exact match
                     if partialName.lower() == item.lower():
+                    # use backticks to refer to column names containing spaces and @ for variables
                         institution_df = activities.query("`responsible institute` == @item")
-                    # Partial match
+                    # partial match
                     elif partialName.lower() in item.lower():
                         institution_df = activities.query("`responsible institute` == @item")
+                
         return institution_df
-
+    
     def getActivitiesByResponsiblePerson(self, partialName):
         person_df = DataFrame()
         for idx, row in activities.iterrows():
             for column_name, person in row.items():
                 if column_name == "responsible person":
-                    # Exact match
+                    # exact match
                     if partialName.lower() == person.lower():
+                        # use backticks to refer to column names containing spaces and @ for variables
                         person_df = activities.query("`responsible person` == @person")
-                    # Partial match
+                    # partial match
                     elif partialName.lower() in person.lower():
                         person_df = activities.query("`responsible person` == @person")
-        return person_df
 
+        return person_df
+    
     def getActivitiesStartedAfter(self, date):
         start_date_df = DataFrame()
-        start_date_df = activities.query("`start date` >= @date")
+        for idx, row in activities.iterrows():
+            for column_name, item in row.items():
+                if column_name == "start date":
+                    start_date_df = activities.query("`start date` >= @date")
+        
         return start_date_df
-
+    
     def getActivitiesEndedBefore(self, date):
         end_date_df = DataFrame()
-        end_date_df = activities.query("`end date` <= @date and `end date` != ''")
+        for idx, row in activities.iterrows():
+            for column_name, item in row.items():
+                if column_name == "end date":
+                    end_date_df = activities.query("`end date` <= @date and `end date` != ''")
+        
         return end_date_df
 
+    
     def getAcquisitionsByTechnique(self, inputtechnique):
+        acquisition_sql_df = pd.merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
         technique_df = DataFrame()
-        technique_df = acquisition_sql_df.query("`technique` == @inputtechnique")
+        for idx, row in acquisition_sql_df.iterrows():
+            for column_name, technique in row.items():
+                if column_name == "technique":
+                    # exact match
+                    if inputtechnique.lower() == technique.lower():
+                    # use backticks to refer to column names containing spaces and @ for variables
+                        technique_df = acquisition_sql_df.query("technique` == @technique")
+                    # partial match
+                    elif inputtechnique.lower() in technique.lower():
+                        technique_df = acquisition_sql_df.query("`technique` == @technique")
+                    
         return technique_df
 
     def getActivitiesUsingTool(self, tool):
-        # Merge the activities DataFrame with the tools DataFrame
-        activities_with_tool = merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
-
+    
         # Normalize the tool string for comparison
         tool_lower = tool.lower()
-
+    
         # Filter rows where the tool column matches the exact or partial tool name
-        activities_tool = activities_with_tool[
-            activities_with_tool['tool'].str.lower().str.contains(tool_lower, case=False, na=False)
+        activities_tool = activities[
+            activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)
         ]
+    
         return activities_tool
     
 class BasicMashup:
