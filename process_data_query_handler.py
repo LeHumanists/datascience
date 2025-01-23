@@ -55,21 +55,24 @@ class ProcessDataQueryHandler(QueryHandler):
 
         return institution_df
     
+    
     def getActivitiesByResponsiblePerson(self, partialName):
         person_df = DataFrame()
-        for idx, row in activities.iterrows():
-            for column_name, person in row.items():
-                if column_name == "responsible person":
-                    # exact match
-                    if partialName.lower() == person.lower():
-                        # use backticks to refer to column names containing spaces and @ for variables
-                        person_df = activities.query("`responsible person` == @person")
-                    # partial match
-                    elif partialName.lower() in person.lower():
-                        person_df = activities.query("`responsible person` == @person")
+        #handle empty input strings
+        if not partialName:
+            person_df = "No match found."
+        else:
+            #filter the df based on input string
+            cleaned_input = partialName.lower().strip()
+            person_df = activities[activities["responsible person"].str.lower().str.strip().str.contains(cleaned_input) | activities["responsible person"].str.lower().str.strip().eq(cleaned_input)]
+
+            # handle non matching inputs
+            if person_df.empty:
+                person_df = "No match found."
 
         return person_df
     
+
     def getActivitiesStartedAfter(self, date):
         start_date_df = DataFrame()
         for idx, row in activities.iterrows():
