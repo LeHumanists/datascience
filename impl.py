@@ -494,18 +494,39 @@ class QueryHandler(Handler):
     def getById(self, id: str):
         pass 
 
-    
 class MetadataQueryHandler(QueryHandler):
     def __init__(self):
         super().__init__()
-    
-    def getById(self, id: str) -> DataFrame:
-
-        object_query = f"""
+        self.PREFIXES = """
         PREFIX schema: <https://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         PREFIX dcterms: <http://purl.org/dc/terms/>
+        """
 
+    def _execute_sparql(self, query: str) -> pd.DataFrame:
+        if not self.dbPathOrUrl:
+            logging.error("SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
+            return pd.DataFrame()
+
+        try:
+            sparql = SPARQLWrapper(self.dbPathOrUrl)
+            sparql.setQuery(self.PREFIXES + query)
+            sparql.setReturnFormat(JSON)
+            results = sparql.query().convert()
+
+            # Extract data into a DataFrame
+            columns = results["head"]["vars"]
+            rows = [
+                [binding.get(col, {}).get("value", None) for col in columns]
+                for binding in results["results"]["bindings"]
+            ]
+            return pd.DataFrame(rows, columns=columns)
+        except Exception as e:
+            logging.error(f"Error executing SPARQL query on {self.dbPathOrUrl}:\n{e}")
+            return pd.DataFrame()
+
+    def getById(self, id: str) -> pd.DataFrame:
+        object_query = f"""
         SELECT DISTINCT ?id ?type ?title ?dateCreated ?maker ?spatial
         WHERE {{
             ?object dcterms:identifier '{id}' .
@@ -519,9 +540,6 @@ class MetadataQueryHandler(QueryHandler):
         """
 
         person_query = f"""
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-
         SELECT DISTINCT ?id ?name ?createdFor
         WHERE {{
             ?person dcterms:identifier '{id}' .
@@ -530,6 +548,7 @@ class MetadataQueryHandler(QueryHandler):
             OPTIONAL {{ ?person dcterms:creator ?createdFor . }}
         }}
         """
+
         # Execute both queries
         object_df = self._execute_sparql(object_query)
         if not object_df.empty:
@@ -539,71 +558,11 @@ class MetadataQueryHandler(QueryHandler):
         if not person_df.empty:
             return person_df
 
-        # Log and return empty DataFrame if no results
         logging.warning(f"No data found for ID: {id}")
         return pd.DataFrame(columns=["id", "type", "title", "dateCreated", "maker", "spatial", "name", "createdFor"])
 
-    def _execute_sparql(self, query: str) -> pd.DataFrame:
-        """
-        Helper method to execute SPARQL queries and return results as a DataFrame.
-        """
-        if not self.dbPathOrUrl:
-            logging.error("SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
-            return pd.DataFrame()
-
-        try:
-            sparql = SPARQLWrapper(self.dbPathOrUrl)
-            sparql.setQuery(query)
-            sparql.setReturnFormat(JSON)
-            results = sparql.query().convert()
-
-            # Extract data into a DataFrame
-            columns = results["head"]["vars"]
-            rows = [
-                [binding.get(col, {}).get("value", None) for col in columns]
-                for binding in results["results"]["bindings"]
-            ]
-            return pd.DataFrame(rows, columns=columns)
-        except Exception as e:
-            logging.error(
-                f"Error executing SPARQL query on {self.dbPathOrUrl}:\nQuery: {query}\nError: {e}"
-            )
-            return pd.DataFrame()
-
-
-    def execute_query(self, query: str) -> pd.DataFrame:
-        """
-        Execute a SPARQL query and return the result as a DataFrame.
-        """
-        if not self.dbPathOrUrl:
-            logging.error("SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
-            return pd.DataFrame()
-
-        try:
-            sparql = SPARQLWrapper(self.dbPathOrUrl)  # Usa o endpoint configurado
-            sparql.setQuery(query)
-            sparql.setReturnFormat(JSON)
-            results = sparql.query().convert()
-
-            # Extrai os dados para um DataFrame
-            columns = results["head"]["vars"]
-            rows = [
-                [binding.get(col, {}).get("value", None) for col in columns]
-                for binding in results["results"]["bindings"]
-            ]
-
-            return pd.DataFrame(rows, columns=columns)
-        except Exception as e:
-            logging.error(f"Error executing SPARQL query on {self.dbPathOrUrl}: {e}")
-            return pd.DataFrame()
-
-    
     def getAllPeople(self) -> pd.DataFrame:
-        """
-        Fetch all people from the database.
-        """
         query = """
-        PREFIX dcterms: <http://purl.org/dc/terms/>
         SELECT DISTINCT ?personName ?personID
         WHERE {
             ?object dcterms:creator ?creator .
@@ -612,16 +571,10 @@ class MetadataQueryHandler(QueryHandler):
         }
         ORDER BY ?personName
         """
-        return self.execute_query(query)
+        return self._execute_sparql(query)
 
     def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
-        """
-        Fetch all cultural heritage objects from the database.
-        """
         query = """
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX schema: <http://schema.org/>
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?id ?title ?date ?owner ?place
         WHERE {
             ?object a <http://dbpedia.org/ontology/CulturalHeritageObject> .
@@ -633,15 +586,10 @@ class MetadataQueryHandler(QueryHandler):
         }
         ORDER BY ?title
         """
-        return self.execute_query(query)
+        return self._execute_sparql(query)
 
     def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame:
-        """
-        Retrieve all authors of a specific cultural heritage object by its ID.
-        """
         query = f"""
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?personName ?personID
         WHERE {{
             ?object dcterms:identifier "{object_id}" ;
@@ -651,16 +599,10 @@ class MetadataQueryHandler(QueryHandler):
         }}
         ORDER BY ?personName
         """
-        return self.execute_query(query)
+        return self._execute_sparql(query)
 
     def getCulturalHeritageObjectsAuthoredBy(self, id_value: str) -> pd.DataFrame:
-        """
-        Retrieve all cultural heritage objects authored by a specific person by their ID.
-        """
         query = f"""
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX schema: <http://schema.org/>
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?objectID ?title ?date ?owner ?place
         WHERE {{
             ?object dcterms:creator <http://example.org/person/{id_value}> ;
@@ -672,8 +614,9 @@ class MetadataQueryHandler(QueryHandler):
         }}
         ORDER BY ?title
         """
-        return self.execute_query(query)
-
+        return self._execute_sparql(query)
+    
+    
 activities = DataFrame()
 acquisition_sql_df = DataFrame()
 tool_sql_df= DataFrame()
