@@ -99,6 +99,42 @@ class BasicMashup:
                 person_list = [Person(row["personID"], row["personName"]) for _, row in merged_df.iterrows() if row["personID"].strip() and row["personName"].strip()]  # Create Person objects from rows
         return person_list
     
+
+    def combineAuthorsOfObjects(self, df, authorId: str, handler):
+        # Checks if the "Author" column exists in the dataframe
+        if "authors" in df.columns:
+            df_list=[]
+            
+            for handler in self.metadataQuery: 
+                df_objects= handler.getAllCulturalHeritageObjects(authorId)
+                df_authors= handler.getAllPeople()
+
+            # Iterate through each row of the dataframe
+            for idx, row in df.iterrows():# Combine object and author information
+                if df_objects is not None and not df_objects.empty:
+                    if df_authors is not None and not df_authors.empty:
+                        # Create a map of objectID to list of Author instances
+                        object_authors_map = {}
+                        for obj_id in df_objects["id"].unique():
+                            authors = df_authors[df_authors["objectID"] == obj_id]
+                            object_authors_map[obj_id] = [
+                                Author(name=row["name"], identifier=row["authorId"])
+                                for _, row in authors.iterrows()
+                            ]
+                        
+                        # Add the authors list to each row in df_objects
+                        df_objects["Authors"] = df_objects["id"].map(object_authors_map.get)
+                    else:
+                        df_objects["Authors"] = []
+
+                df_list.append(df_objects)
+        # Remove duplicate rows in the dataframe
+        return df.drop_duplicates()  # Return the dataframe without duplicate rows
+
+
+
+
+    
     def getAllCulturalHeritageObjects(self):
         # Retrieve list of handlers from self.metadataQuery in which there is information about cultural heritage objects.      
         handler_list = self.metadataQuery

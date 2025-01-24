@@ -171,15 +171,12 @@ class Exporting(Activity):
 
 class Handler(object):
     def __init__(self, dbPathOrUrl=""):
-        # Initialize the database path or URL
         self.dbPathOrUrl = dbPathOrUrl
 
     def getDbPathOrUrl(self):
-        # Return the configured database path or URL
         return self.dbPathOrUrl
 
     def setDbPathOrUrl(self, url):
-        # Set the database path or URL
         self.dbPathOrUrl = url
         return True  # Indicate success
 
@@ -188,20 +185,8 @@ class UploadHandler(Handler):
     def __init__(self, dbPathOrUrl=""):
         super().__init__(dbPathOrUrl)
     def pushDataToDb(self, file_path):
-        # Placeholder for data upload logic, to be implemented by subclasses
-        raise NotImplementedError("Subclasses must implement 'pushDataToDb'.")
+        pass
     
-class ResourceURIs:
-    NauticalChart = URIRef("https://dbpedia.org/resource/Nautical_chart")
-    ManuscriptPlate = URIRef("http://example.org/ManuscriptPlate")
-    ManuscriptVolume = URIRef("https://dbpedia.org/resource/Category:Manuscripts_by_collection")
-    PrintedVolume = URIRef("https://schema.org/PublicationVolume")
-    PrintedMaterial = URIRef("http://example.org/PrintedMaterial")
-    Herbarium = URIRef("https://dbpedia.org/resource/Herbarium")
-    Specimen = URIRef("https://dbpedia.org/resource/Specimen")
-    Painting = URIRef("https://dbpedia.org/resource/Category:Painting")
-    Model = URIRef("https://dbpedia.org/resource/Category:Prototypes")
-    Map = URIRef("https://dbpedia.org/resource/Category:Maps")
 
 class MetadataUploadHandler(UploadHandler):
     def __init__(self):
@@ -214,22 +199,19 @@ class MetadataUploadHandler(UploadHandler):
 
         # Mapping types to URIs
         self.type_mapping = {
-            "Nautical chart": ResourceURIs.NauticalChart,
-            "Manuscript plate": ResourceURIs.ManuscriptPlate,
-            "Manuscript volume": ResourceURIs.ManuscriptVolume,
-            "Printed volume": ResourceURIs.PrintedVolume,
-            "Printed material": ResourceURIs.PrintedMaterial,
-            "Herbarium": ResourceURIs.Herbarium,
-            "Specimen": ResourceURIs.Specimen,
-            "Painting": ResourceURIs.Painting,
-            "Model": ResourceURIs.Model,
-            "Map": ResourceURIs.Map,
-        }
+            "Nautical chart": URIRef("https://dbpedia.org/resource/Nautical_chart"),
+            "Manuscript plate": URIRef("http://example.org/ManuscriptPlate"),
+            "Manuscript volume": URIRef("https://dbpedia.org/resource/Category:Manuscripts_by_collection"),
+            "Printed volume": URIRef("https://schema.org/PublicationVolume"),
+            "Printed material": URIRef("http://example.org/PrintedMaterial"),
+            "Herbarium": URIRef("https://dbpedia.org/resource/Herbarium"),
+            "Specimen": URIRef("https://dbpedia.org/resource/Specimen"),
+            "Painting": URIRef("https://dbpedia.org/resource/Category:Painting"),
+            "Model": URIRef("https://dbpedia.org/resource/Category:Prototypes"),
+            "Map": URIRef("https://dbpedia.org/resource/Category:Maps"),
+            }
 
     def pushDataToDb(self, file_path: str) -> bool:
-        """
-        Reads a CSV file and uploads its data to a graph database.
-        """
         if not os.path.exists(file_path):
             print(f"Error: File not found at {file_path}")
             return False
@@ -264,11 +246,30 @@ class MetadataUploadHandler(UploadHandler):
         if pd.notna(row.get("Title")):
             self.my_graph.add((subj, DCTERMS.title, Literal(row["Title"].strip())))
         if pd.notna(row.get("Date")):
-            self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.date)))
+            self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.string)))
         if pd.notna(row.get("Owner")):
             self.my_graph.add((subj, FOAF.maker, Literal(row["Owner"].strip())))
         if pd.notna(row.get("Place")):
             self.my_graph.add((subj, DCTERMS.spatial, Literal(row["Place"].strip())))
+            
+        # Process authors
+            authors = row["Author"].split(",") if isinstance(row["Author"], str) else []
+            for author_string in authors:
+                author_string = author_string.strip()
+                
+                # Use regex to find author ID with either VIAF or ULAN
+                author_id_match = re.search(r'\((VIAF|ULAN):(\d+)\)', author_string)  # Match both VIAF and ULAN formats
+                if author_id_match:
+                    id_type = author_id_match.group(1)  # Either 'VIAF' or 'ULAN'
+                    id_value = author_id_match.group(2)  # The numeric ID
+                    person_id = URIRef(f"http://example.org/person/{id_type}_{id_value}")
+                else:
+                    # Fallback to a simple URI based on the author's name if no ID is found
+                    person_id = URIRef(f"http://example.org/person/{author_string.replace(' ', '_')}")
+                
+                # Add the author information to the graph
+                self.my_graph.add((person_id, DCTERMS.creator, subj))
+                self.my_graph.add((person_id, FOAF.name, Literal(author_string, datatype=XSD.string)))
 
     def _uploadGraphToBlazegraph(self) -> bool:
         """Uploads the RDF graph to Blazegraph."""
@@ -489,12 +490,17 @@ class ProcessDataUploadHandler(UploadHandler):
 class QueryHandler(Handler):
     def __init__(self, dbPathOrUrl: str = ""):
         super().__init__(dbPathOrUrl)
+        
+    def getById(self, id: str):
+        pass 
 
+    
+class MetadataQueryHandler(QueryHandler):
+    def __init__(self):
+        super().__init__()
+    
     def getById(self, id: str) -> DataFrame:
-        """
-        Retrieve data by its ID.
-        Returns a DataFrame with all identifiable entities matching the input ID.
-        """
+
         object_query = f"""
         PREFIX schema: <https://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -837,6 +843,37 @@ class BasicMashup(object):
             obj = self._createEntityObject(entity_data)  # Create an object using _createEntityObject
             object_list.append(obj)  # Append the created object to the list
         return object_list
+    
+    def combineAuthorsOfObjects(self, df, handler):
+        if "authors" in df.columns:
+        # Iterate over all rows of the DataFrame
+            for idx, row in df.iterrows():
+                # Check that the "authors" column is not empty or None
+                if row["authors"] not in [None, ""]:
+                    object_id = row["id"]
+                    
+                    # Retrieve the authors for the object
+                    authors_df = handler.getAuthorsOfCulturalHeritageObject(object_id)
+                    
+                    # If the authors DataFrame is not empty
+                    if authors_df is not None and not authors_df.empty:
+                        # Add the object ID and the combination of author name and ID
+                        authors_df["auth"] = authors_df["authorName"].astype(str) + "-" + authors_df["authorId"].astype(str)
+                        authors_df["id"] = str(object_id)
+                        
+                        # If there are multiple authors, join them with a semicolon
+                        if authors_df.shape[0] > 1:
+                            authors_combined = ";".join(authors_df["auth"])
+                            df.at[idx, "authors"] = authors_combined
+                        else:
+                            # Otherwise, take the single author
+                            df.at[idx, "authors"] = authors_df["auth"].iloc[0]
+                    else:
+                        # If there are no authors, leave the "authors" column empty
+                        df.at[idx, "authors"] = ""
+        
+        # Remove duplicate rows and return the modified DataFrame
+        return df.drop_duplicates()
 
     def getEntityById(self, entity_id: str) -> Optional[IdentifiableEntity]:
         if not self.metadataQuery:  # Return None if no metadata handlers are available
@@ -960,65 +997,49 @@ class BasicMashup(object):
         # Return the list of author objects
         return author_result_list
 
-    def getCulturalHeritageObjectsAuthoredBy(self, authorId: str):       
-        result = []
-        handler_list = self.metadataQuery
-        df_list = []
-
-        # Collect data from each MetadataQueryHandler
-        for handler in handler_list:
-            # Fetch cultural heritage objects authored by the given author ID
-            df_objects = handler.getCulturalHeritageObjectsAuthoredBy(authorId)
+    def getCulturalHeritageObjectsAuthoredBy(self, authorId: str): 
+        # List to collect the final cultural heritage objects      
+        object_result_list = [] 
+        
+        # Check if there are any handlers to query
+        if not self.metadataQuery: 
+            return object_result_list  # Return an empty list if no handlers are available 
+        
+        # List to collect DataFrames to be merged
+        df_list = [] 
+        
+        # Iterate over each handler in self.metadataQuery
+        for handler in self.metadataQuery:  
+            # Retrieve cultural heritage objects authored by the given author
+            df_objects = handler.getCulturalHeritageObjectsAuthoredBy(authorId)  
             
-            # Fetch authors related to the objects
-            df_authors = handler.getAllPeople()
-
-            # Combine object and author information
-            if not df_objects.empty and not df_authors.empty:
-                df_objects["Authors"] = df_objects["id"].map(
-                    lambda obj_id: ", ".join(
-                        df_authors[df_authors["objectID"] == obj_id]["name"].tolist()
-                    )
-                )
-            else:
-                df_objects["Authors"] = ""
-
-            df_list.append(df_objects)
-
-        # Combine all dataframes and remove duplicates
+            # If the DataFrame is not empty
+            if df_objects is not None and not df_objects.empty:  
+                # Combine author data with cultural heritage objects
+                df_object_update = self.combineAuthorsOfObjects(df_objects, handler)  
+                
+                # Add the processed DataFrame to the df_list
+                df_list.append(df_object_update)  
+        
+        # If df_list is empty, return it as an empty list
+        if not df_list:  
+            return object_result_list  
+        
+        # Merge all DataFrames into a single one, remove duplicates, and handle NaN values
         df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
-
-        # Create instances of appropriate classes
+        
+        # Iterate through each row of the merged DataFrame
         for _, row in df_union.iterrows():
-            obj_type = row["type"]
+            # Convert the row to a dictionary
+            entity_data = row.to_dict()
+            
+            # Use the _createEntityObject helper method to create the object
+            obj = self._createEntityObject(entity_data)
+            
+            # Append the created object to the result list
+            object_result_list.append(obj)
 
-            # Map types to classes
-            if "NauticalChart" in obj_type:
-                object = NauticalChart(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "ManuscriptPlate" in obj_type:
-                object = ManuscriptPlate(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "ManuscriptVolume" in obj_type:
-                object = ManuscriptVolume(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Book" in obj_type:
-                object = PrintedVolume(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "PrintedMaterial" in obj_type:
-                object = PrintedMaterial(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Herbarium" in obj_type:
-                object = Herbarium(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Specimen" in obj_type:
-                object = Specimen(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Painting" in obj_type:
-                object = Painting(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Model" in obj_type:
-                object = Model(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            elif "Map" in obj_type:
-                object = Map(id=row["id"], title=row["title"], date=row["date"], owner=row["owner"], place=row["place"])
-            else:
-                continue
-
-            result.append(object)
-
-        return result
+        return object_result_list  # Return the list of created objects
 
     # methods for relational db start here
     
