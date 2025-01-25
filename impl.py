@@ -120,6 +120,9 @@ class Activity(object):
         self.end = end
         self.refers_to = refers_to
     
+    """ def __repr__(self):
+        return f"Processing(responsible_institute={self.institute}, responsible_person={self.person}, tool={self.tools}, start_date={self.start}, end_date={self.end}, refers_to={self.refers_to})" """
+    
     def getResponsibleInstitute(self):
         return self.institute
 
@@ -153,6 +156,9 @@ class Acquisition(Activity):
         self.technique = technique
 
         super().__init__(institute, person, tools, start, end, refersTo)
+    
+    """ def __repr__(self):
+        return f"Acquisition(responsible_institute={self.institute}, responsible_person={self.person}, tool={self.tools}, start_date={self.start}, end_date={self.end}, refers_to={self.refers_to}, technique={self.technique})" """
     
     def getTechnique(self):
         return self.technique
@@ -494,7 +500,6 @@ class QueryHandler(Handler):
     def getById(self, id: str):
         pass 
 
-    
 class MetadataQueryHandler(QueryHandler):
     def __init__(self):
         super().__init__()
@@ -569,11 +574,6 @@ class MetadataQueryHandler(QueryHandler):
                 f"Error executing SPARQL query on {self.dbPathOrUrl}:\nQuery: {query}\nError: {e}"
             )
             return pd.DataFrame()
-
-class MetadataQueryHandler(QueryHandler):
-    def __init__(self):
-        # Inicializa a classe base sem um endpoint inicialmente
-        super().__init__()
 
     def execute_query(self, query: str) -> pd.DataFrame:
         """
@@ -677,121 +677,139 @@ class MetadataQueryHandler(QueryHandler):
         ORDER BY ?title
         """
         return self.execute_query(query)
-
-activities = DataFrame()
+    
+    
 acquisition_sql_df = DataFrame()
 tool_sql_df= DataFrame()
+
+def query_rel_db():
+    activities = DataFrame()
+    with connect("relational.db") as con:
+        queries = {
+            "Acquisition": "SELECT * FROM Acquisition",
+            "Processing": "SELECT * FROM Processing",
+            "Modelling": "SELECT * FROM Modelling",
+            "Optimising": "SELECT * FROM Optimising",
+            "Exporting": "SELECT * FROM Exporting",
+            "Tools": "SELECT * FROM Tools",
+        }
+        df_dict = {}
+        for key, query in queries.items():
+            df_dict[key] = read_sql(query, con)
+            if df_dict[key].empty:
+                print(f"Warning: {key} table is empty.")
+
+    activities = pd.concat([df_dict["Acquisition"], df_dict["Processing"], df_dict["Modelling"], df_dict["Optimising"], df_dict["Exporting"]], ignore_index=True)
+    tool_sql_df = df_dict["Tools"]
+    activities = pd.merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
+
+    return activities
 
 class ProcessDataQueryHandler(QueryHandler):
     def __init__(self, dbPathOrUrl = ""):
         super().__init__(dbPathOrUrl)
+    
+    """ def getById(self, id: str) -> pd.DataFrame:
+        return pd.DataFrame() """
 
     def getAllActivities(self):
-        with connect("relational.db") as con:
-            queries = {
-                "Acquisition": "SELECT * FROM Acquisition",
-                "Processing": "SELECT * FROM Processing",
-                "Modelling": "SELECT * FROM Modelling",
-                "Optimising": "SELECT * FROM Optimising",
-                "Exporting": "SELECT * FROM Exporting",
-                "Tools": "SELECT * FROM Tools",
-            }
-            dfs = {}
-            for key, query in queries.items():
-                dfs[key] = read_sql(query, con)
-                if dfs[key].empty:
-                    print(f"Warning: {key} table is empty.")
-
-        activities = concat([dfs["Acquisition"], dfs["Processing"], dfs["Modelling"], dfs["Optimising"], dfs["Exporting"]], ignore_index=True)
-        activities = pd.merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
-
         
-        print("Activities type:", type(activities))  # Debugging
-        print("Acquisition type:", type(acquisition_sql_df))  # Debugging
-        return activities
+        return query_rel_db()
 
 
     def getActivitiesByResponsibleInstitution(self, partialName):
+        activities = query_rel_db()
         institution_df = DataFrame()
-        for idx, row in activities.iterrows(): # check if there is something to iterate over the rows without getting also the index
-            for column_name, item in row.items():
-                if column_name == "responsible institute":
-                    # exact match
-                    if partialName.lower() == item.lower():
-                    # use backticks to refer to column names containing spaces and @ for variables
-                        institution_df = activities.query("`responsible institute` == @item")
-                    # partial match
-                    elif partialName.lower() in item.lower():
-                        institution_df = activities.query("`responsible institute` == @item")
-                
+        # handle empty input strings
+        if not partialName:
+           print("The input string is empty.")
+           return institution_df
+        else:
+            # filter the df based on input string
+            cleaned_input = partialName.lower().strip()
+            institution_df = activities[activities["responsible institute"].str.lower().str.strip().str.contains(cleaned_input) | activities["responsible institute"].str.lower().str.strip().eq(cleaned_input)]
+
+    # handle non matching inputs
+            if institution_df.empty:
+                print("No match found.")
+
         return institution_df
     
+    
     def getActivitiesByResponsiblePerson(self, partialName):
+        activities = query_rel_db()
         person_df = DataFrame()
-        for idx, row in activities.iterrows():
-            for column_name, person in row.items():
-                if column_name == "responsible person":
-                    # exact match
-                    if partialName.lower() == person.lower():
-                        # use backticks to refer to column names containing spaces and @ for variables
-                        person_df = activities.query("`responsible person` == @person")
-                    # partial match
-                    elif partialName.lower() in person.lower():
-                        person_df = activities.query("`responsible person` == @person")
+        #handle empty input strings
+        if not partialName:
+            print("The input string is empty.")
+            return person_df
+        else:
+            #filter the df based on input string
+            cleaned_input = partialName.lower().strip()
+            person_df = activities[activities["responsible person"].str.lower().str.strip().str.contains(cleaned_input) | activities["responsible person"].str.lower().str.strip().eq(cleaned_input)]
+
+            # handle non matching inputs
+            if person_df.empty:
+                print("No match found.")
 
         return person_df
     
+
     def getActivitiesStartedAfter(self, date):
+        activities = query_rel_db()
         start_date_df = DataFrame()
-        for idx, row in activities.iterrows():
-            for column_name, item in row.items():
-                if column_name == "start date":
-                    start_date_df = activities.query("`start date` >= @date")
+
+        activities.columns = activities.columns.str.strip()
+        print("Columns in the activities df:", activities.columns)
+
+        start_date_df = activities[(activities["start date"] >= date) & (activities["start date"] != '')]
+        
+        if start_date_df.empty:
+            return "No match found."
         
         return start_date_df
+
     
     def getActivitiesEndedBefore(self, date):
+        activities = query_rel_db()
         end_date_df = DataFrame()
-        for idx, row in activities.iterrows():
-            for column_name, item in row.items():
-                if column_name == "end date":
-                    end_date_df = activities.query("`end date` <= @date and `end date` != ''")
+
+        end_date_df = activities[(activities["end date"] <= date) & (activities["end date"] != '')]
+        
+        if end_date_df.empty:
+            return "No match found."
         
         return end_date_df
 
     
     def getAcquisitionsByTechnique(self, inputtechnique):
-        acquisition_sql_df = pd.merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
-        technique_df = DataFrame()
-        for idx, row in acquisition_sql_df.iterrows():
-            for column_name, technique in row.items():
-                if column_name == "technique":
-                    # exact match
-                    if inputtechnique.lower() == technique.lower():
-                    # use backticks to refer to column names containing spaces and @ for variables
-                        technique_df = acquisition_sql_df.query("technique` == @technique")
-                    # partial match
-                    elif inputtechnique.lower() in technique.lower():
-                        technique_df = acquisition_sql_df.query("`technique` == @technique")
+        # fetch Acquisition table
+        with connect("relational.db") as con:
+            query1 = "SELECT * FROM Acquisition"
+            query2 = "SELECT * FROM Tools"
+
+            acquisition_sql_df = read_sql(query1, con)
+            tool_sql_df = read_sql(query2, con)
+
+        merged_df = pd.merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
+        filtered_df = merged_df[merged_df["technique"].str.contains(inputtechnique, case=False, na=False)]
                     
-        return technique_df
+        return filtered_df
 
     def getActivitiesUsingTool(self, tool):
-    
+        activities = query_rel_db()
         # Normalize the tool string for comparison
         tool_lower = tool.lower()
     
         # Filter rows where the tool column matches the exact or partial tool name
-        activities_tool = activities[
-            activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)
-        ]
+        activities_tool = activities[activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)]
     
         return activities_tool
     
 class BasicMashup(object):
-    def __init__(self, metadataQuery=None, processQuery=None):
-        self.metadataQuery = metadataQuery if metadataQuery is not None else []  # Initialize metadataQuery as a list of MetadataQueryHandler
-        self.processQuery = processQuery if processQuery is not None else []     # Initialize processQuery as a list of ProcessorDataQueryHandler
+    def __init__(self):
+        self.metadataQuery = []  
+        self.processQuery = []
 
         # Mapping object types to their corresponding subclasses
         self.type_mapping = {
@@ -807,25 +825,21 @@ class BasicMashup(object):
             "Map": Map,
         }
 
-    def cleanMetadataHandlers(self) -> bool:
-        self.metadataQuery.clear()  # Clear the list of metadataQuery handlers
+    def cleanMetadataHandlers(self):
+        self.metadataQuery = [] 
         return True
 
-    def cleanProcessHandlers(self) -> bool:
-        self.processQuery.clear()  # Clear the list of processQuery handlers
+    def cleanProcessHandlers(self):
+        self.processQuery = [] 
         return True
 
-    def addMetadataHandler(self, handler) -> bool:
-        if handler not in self.metadataQuery:  # Add a MetadataQueryHandler object to the metadataQuery list if not already present
-            self.metadataQuery.append(handler)
-            return True
-        return False
+    def addMetadataHandler(self, handler: MetadataQueryHandler) -> bool:
+        self.metadataQuery.append(handler)
+        return True
 
-    def addProcessHandler(self, handler) -> bool:
-        if handler not in self.processQuery:  # Add a ProcessorDataQueryHandler object to the processQuery list if not already present
-            self.processQuery.append(handler)
-            return True
-        return False
+    def addProcessHandler(self, handler: ProcessDataQueryHandler) -> bool:
+        self.processQuery.append(handler)
+        return True
 
     def _createEntityObject(self, entity_data: dict) -> IdentifiableEntity:
         entity_type = entity_data.get("type", None)  # Get the type of the entity from the data
@@ -1044,111 +1058,117 @@ class BasicMashup(object):
     # methods for relational db start here
     
     def getAllActivities(self):
+        activities_df = pd.DataFrame()
+        activities_df_list = []
         if self.processQuery:
-            activities_df_list = [process_qh.getAllActivities() for process_qh in self.processQuery]
+            for process_qh in self.processQuery:
+                activities_df = process_qh.getAllActivities()
+                activities_df_list.append(activities_df)
 
-            concat_df = concat(activities_df_list, ignore_index=True)
-            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-            tools_sql_df = read_sql(query, con)
+            concat_df = pd.concat(activities_df_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates() # drop only identical rows
         
         else:
             print("No processQueryHandler found")
         
-        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
-        return instantiateClass(merged_df)
+        updated_df = join_tools(concat_df_cleaned)
+        print(instantiate_class(updated_df))
+        return instantiate_class(updated_df)
         
 
     def getActivitiesByResponsibleInstitution(self, partialName):
+        institution_df = pd.DataFrame()
+        institution_df_list = []
         if self.processQuery:
-            act_by_inst_df_list = [process_qh.getActivitiesByResponsibleInstitution(partialName) for process_qh in self.processQuery]
+            for process_qh in self.processQuery:
+                institution_df = process_qh.getActivitiesByResponsibleInstitution(partialName)
+                institution_df_list.append(institution_df)
 
-            concat_df = concat(act_by_inst_df_list, ignore_index=True)
-            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-            tools_sql_df = read_sql(query, con)
+            concat_df = pd.concat(institution_df_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates()
         
         else:
             print("No processQueryHandler found")
         
-        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
-        return instantiateClass(merged_df)
+        updated_df = join_tools(concat_df_cleaned)
+        print(instantiate_class(updated_df))
+        return instantiate_class(updated_df)
     
 
     def getActivitiesByResponsiblePerson(self, partialName):
+        person_df = pd.DataFrame()
+        person_df_list = []
         if self.processQuery:
-            act_by_pers_df_list = [process_qh.getActivitiesByResponsiblePerson(partialName) for process_qh in self.processQuery]
+            for process_qh in self.processQuery:
+                person_df = process_qh.getActivitiesByResponsiblePerson(partialName)
+                person_df_list.append(person_df)
 
-            concat_df = concat(act_by_pers_df_list, ignore_index=True)
-            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-            tools_sql_df = read_sql(query, con)
-
+            concat_df = pd.concat(person_df_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates()
+        
         else:
             print("No processQueryHandler found")
-
-        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
-        return instantiateClass(merged_df)
+        
+        updated_df = join_tools(concat_df_cleaned)
+        print(instantiate_class(updated_df))
+        return instantiate_class(updated_df)
     
 
     def getActivitiesStartedAfter(self, date):
+        started_after_df = pd.DataFrame()
+        started_after_df_list = []
         if self.processQuery:
-            act_start_aft_list = [process_qh.getActivitiesStartedAfter(date) for process_qh in self.processQuery]
+            for process_qh in self.processQuery:
+                started_after_df = process_qh.getActivitiesStartedAfter(date)
+                started_after_df_list.append(started_after_df)
 
-            concat_df = concat(act_start_aft_list, ignore_index=True)
-            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-            tools_sql_df = read_sql(query, con)
+            concat_df = concat(started_after_df_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates()
 
         else:
             print("No processQueryHandler found")
         
-        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
-        return instantiateClass(merged_df)
+        updated_df = join_tools(concat_df_cleaned)
+        print(instantiate_class(updated_df))
+        return instantiate_class(updated_df)
     
 
     def getActivitiesEndedBefore(self, date):
+        ended_before_df = pd.DataFrame()
+        ended_before_df_list = []
         if self.processQuery:
-            act_end_before_list = [process_qh.getActivitiesStartedAfter(date) for process_qh in self.processQuery]
+            for process_qh in self.processQuery:
+                ended_before_df = process_qh.getActivitiesEndedBefore(date)
+                ended_before_df_list.append(ended_before_df)
 
-            concat_df = concat(act_end_before_list, ignore_index=True)
-            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-            tools_sql_df = read_sql(query, con)
+            concat_df = concat(ended_before_df_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates()
 
         else:
             print("No processQueryHandler found")
-
-        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
-        return instantiateClass(merged_df)
+        
+        updated_df = join_tools(concat_df_cleaned)
+        print(instantiate_class(updated_df))
+        return instantiate_class(updated_df)
     
 
     def getAcquisitionsByTechnique(self, inputtechnique):
+        technique_df = pd.DataFrame()
+        technique_df_list = []
         if self.processQuery:
-            act_by_technique_df_list = [process_qh.getAcquisitionsByTechnique(inputtechnique) for process_qh in self.processQuery]
+            for process_qh in self.processQuery:
+                technique_df = process_qh.getAcquisitionsByTechnique(inputtechnique)
+                technique_df_list.append(technique_df)
 
-            concat_df = concat(act_by_technique_df_list, ignore_index=True)
-            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-            tools_sql_df = read_sql(query, con)
+            concat_df = concat(technique_df_list, ignore_index=True)
+            concat_df_cleaned = concat_df.drop_duplicates()
 
         else:
             print("No processQueryHandler found")
 
-        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
-        return instantiateClass(merged_df)
+        updated_df = join_tools(concat_df_cleaned)
+        print(instantiate_class(updated_df))
+        return instantiate_class(updated_df)
     
 
     def getActivitiesUsingTool(self, tool):
@@ -1156,20 +1176,17 @@ class BasicMashup(object):
             act_activities_tool_list = [process_qh.getActivitiesUsingTool(tool) for process_qh in self.processQuery]
             
             concat_df = concat(act_activities_tool_list, ignore_index=True)
-            concat_df_cleaned = concat_df.drop_duplicates(subset=["unique_id"])
-
-            with connect("relational.db") as con:
-                query = "SELECT * FROM Tools"
-            tools_sql_df = read_sql(query, con)
+            concat_df_cleaned = concat_df.drop_duplicates()
 
         else:
             print("No processQueryHandler found")
 
-        merged_df = pd.merge(tools_sql_df, concat_df_cleaned, on="unique_id", how="inner")
-        return instantiateClass(merged_df)
+        updated_df = join_tools(concat_df_cleaned)
+        print(instantiate_class(updated_df))
+        return instantiate_class(updated_df)
     
 
-def instantiateClass(activity_df):
+def instantiate_class(activity_df):
     activity_list = []
     activity_mapping = {
         "acquisition": Acquisition,
@@ -1178,11 +1195,12 @@ def instantiateClass(activity_df):
         "optimising": Optimising,
         "exporting": Exporting
     }
-
+    #print("The input activity df:", activity_df)
     for idx, row in activity_df.iterrows():
         activity_from_id = re.sub("_\\d+", "", row["unique_id"])
+        #print("The current activity:", activity_from_id)
         if activity_from_id in activity_mapping.keys() and activity_from_id == "acquisition":
-            activity_obj = Acquisition(row["responsible institute"], row["responsible person"], row["technique"], row["tool"], row["start date"], row["end date"], row["refers_to"])
+            activity_obj = Acquisition(row["responsible institute"], row["responsible person"], row["tool"], row["start date"], row["end date"], row["refers_to"], row["technique"])
             activity_list.append(activity_obj)
         elif activity_from_id in activity_mapping.keys() and activity_from_id != "acquisition":
             class_to_use = activity_mapping.get(activity_from_id)
@@ -1190,7 +1208,32 @@ def instantiateClass(activity_df):
             activity_list.append(activity_obj)
     
     return activity_list
+
+def join_tools(activity_df):
+    # ensure the tool column in the df has dtype object
+    activity_df["tool"] = activity_df["tool"].astype("object")
+    #print(activity_df["tool"].apply(type).unique())
+    # create a sub dataframe with just the unique id and tool column
+    tools_subdf = activity_df[["unique_id", "tool"]]
+    # iterate over sub dataframe grouping by unique id
+    for unique_id, group in tools_subdf.groupby(["unique_id"]):
+        #print(f"Current unique id is {unique_id} and current group is {group}")
+        # convert tools to list and then join them
+        concatenated_tools = ", ".join(group["tool"].to_list())
+        #print(f"Concatenated tools for {unique_id}:", concatenated_tools)
+        # update the row that matches the unique_id in the tuple with the content of the concatenated tools variable
+        activity_df.loc[activity_df["unique_id"] == unique_id[0], "tool"] = concatenated_tools
     
+    # convert the strings in the column to lists and assign the resul to a new variable
+    new_tool_col = activity_df["tool"].str.split(", ")
+    # reassign the tool column
+    activity_df["tool"] = new_tool_col
+    # drop identical rows
+    activity_df_updated = activity_df.drop_duplicates(subset=['unique_id'])
+
+    # check 
+    #print("updated dataframe:", activity_df_updated.query("unique_id == 'optimising_27'"))
+    return activity_df_updated
 
 class AdvancedMashup(BasicMashup):
     def __init__(self):
@@ -1277,30 +1320,59 @@ class AdvancedMashup(BasicMashup):
         return objects_list
 
     def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> list[Person]:
-        """Retrieve authors of cultural heritage objects acquired within a specific timeframe."""
-        authors = []
+        query_result = []
 
-        # SPARQL query logic goes here
-        # Ensure that the logic matches your database and query mechanism.
+        # sparql query
+        endpoint = "http://10.201.7.18:9999/blazegraph/sparql"
+        sparql_query = """
+        PREFIX dcterms: <http://purl.org/dc/terms>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
-        # Example:
-        endpoint = "http://10.201.7.18:9999/blazegraph/sparql"  # Replace with your endpoint
-        sparql_query = f"""
-            PREFIX dcterms: <http://purl.org/dc/terms/>
-            PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-            
-            SELECT ?object ?author ?name 
-            WHERE {{
-                ?author dcterms:creator ?object .
-                ?author foaf:name ?name .
-            }}
+        SELECT ?object ?author ?name
+        WHERE {
+            ?author dcterms:creator ?object .
+            ?author foaf:name ?name .
+        }
         """
-        try:
-            authors_cho_df = get(endpoint, sparql_query, True)
-            # Implement the merging logic with relational data based on your schema.
-        except Exception as e:
-            print(f"Error during SPARQL or SQL execution: {e}")
 
-        return authors
+        authors_cho_df = get(endpoint, sparql_query, True)
+        print("Authors and objects dataframe\n:", authors_cho_df)
+
+         # associate id to each object uri
+        objects_id = []
+        slug = ""
+       
+        for idx, row in authors_cho_df.iterrows(): # http://example.org/1
+            if row["object"]:
+                slug = row["object"].split("/")[-1]
+                objects_id.append("object_" + slug)
+            else:
+                print(f"Warning: No object associated to {authors_cho_df["author"].iloc[idx]}")
+
+        authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
+        print("dataframe with ids\n:", authors_cho_df)
+        
+        # sql query
+        with connect("relational.db") as con:
+            sql_query = "SELECT `start date`, `end date`, `refers_to` FROM Acquisition" 
+            acq_timeframe_df = read_sql(sql_query, con)
+        
+        # merge resulting dataframes
+        merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
+        print("Merged dataframe\n:", merged)
+
+        # check for matching values in the merged df and exclude nan values
+        merged[['start date', 'end date']] = merged[['start date', 'end date']].replace("", pd.NA)
+        merged = merged.dropna(subset=["start date", "end date"]) # non considera le stringhe vuote
+        result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
+
+        # extend the empty list with the objects of the class person compliant with the query
+        for _, row in result_df.iterrows():
+            author_uri = row["author"]
+            name = row["name"]
+            author_id = author_uri.split("/")[-1].replace("_", ":")
+            query_result.append(Person(author_id, name))
+        
+        return query_result
 
     

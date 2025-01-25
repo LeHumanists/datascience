@@ -154,12 +154,16 @@ class AdvancedMashup(BasicMashup):
         merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
         print("Merged dataframe\n:", merged)
 
-        # check for matching values in the merged df
-        # exclude empty values
-        if (merged["start date"].notna().notna().all()) & (merged["end date"].notna().all()):
-            result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
+        # check for matching values in the merged df and exclude nan values
+        merged[['start date', 'end date']] = merged[['start date', 'end date']].replace("", pd.NA)
+        merged = merged.dropna(subset=["start date", "end date"]) # non considera le stringhe vuote
+        result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
 
         # extend the empty list with the objects of the class person compliant with the query
-        query_result.extend([Person(author) for author in result_df["name"]])
+        for _, row in result_df.iterrows():
+            author_uri = row["author"]
+            name = row["name"]
+            author_id = author_uri.split("/")[-1].replace("_", ":")
+            query_result.append(Person(author_id, name))
         
         return query_result
