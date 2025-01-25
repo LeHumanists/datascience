@@ -1251,6 +1251,10 @@ class AdvancedMashup(BasicMashup):
         if not authored_objects:
             return activities  # No authored objects found, return empty list
 
+        # Debug: Check authored_objects content
+        print("Authored objects:", authored_objects)
+        print("Types in authored_objects:", [type(obj) for obj in authored_objects])
+
         # Retrieve all activities
         all_activities = []
         for process_handler in self.processQuery:
@@ -1260,7 +1264,9 @@ class AdvancedMashup(BasicMashup):
                 print(f"Error querying activities from process handler: {e}")
 
         # Match activities to authored objects
-        authored_object_ids = {obj.getId() for obj in authored_objects}
+        authored_object_ids = {
+            obj.getId() for obj in authored_objects if hasattr(obj, "getId")
+        }
         for activity in all_activities:
             if any(object_id in activity.getRelatedObjectIds() for object_id in authored_object_ids):
                 activities.append(activity)
@@ -1314,7 +1320,7 @@ class AdvancedMashup(BasicMashup):
     def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> list[Person]:
         query_result = []
 
-        # sparql query
+        # SPARQL query
         endpoint = "http://10.201.7.18:9999/blazegraph/sparql"
         sparql_query = """
         PREFIX dcterms: <http://purl.org/dc/terms>
@@ -1327,44 +1333,53 @@ class AdvancedMashup(BasicMashup):
         }
         """
 
-        authors_cho_df = get(endpoint, sparql_query, True)
-        print("Authors and objects dataframe\n:", authors_cho_df)
+        try:
+            authors_cho_df = get(endpoint, sparql_query, True)
+        except Exception as e:
+            print(f"Error querying SPARQL endpoint: {e}")
+            return []
 
-         # associate id to each object uri
+        if authors_cho_df.empty or not all(col in authors_cho_df.columns for col in ["object", "author", "name"]):
+            print("Error: Missing required columns or SPARQL query returned no data.")
+            return []
+
         objects_id = []
-        slug = ""
-       
-        for idx, row in authors_cho_df.iterrows(): # http://example.org/1
-            if row["object"]:
-                slug = row["object"].split("/")[-1]
-                objects_id.append("object_" + slug)
-            else:
-                print(f"Warning: No object associated to {authors_cho_df["author"].iloc[idx]}")
+        for _, row in authors_cho_df.iterrows():
+            if not row["object"] or pd.isna(row["object"]):
+                print(f"Invalid object URI for author {row['author']}")
+                continue
+            slug = row["object"].split("/")[-1]
+            objects_id.append(f"object_{slug}")
 
-        authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
-        print("dataframe with ids\n:", authors_cho_df)
-        
-        # sql query
-        with connect("relational.db") as con:
-            sql_query = "SELECT `start date`, `end date`, `refers_to` FROM Acquisition" 
-            acq_timeframe_df = read_sql(sql_query, con)
-        
-        # merge resulting dataframes
+        authors_cho_df["objects_id"] = pd.Series(objects_id, dtype="string")
+
+        try:
+            with connect("relational.db") as con:
+                sql_query = "SELECT `start date`, `end date`, `refers_to` FROM Acquisition"
+                acq_timeframe_df = read_sql(sql_query, con)
+        except Exception as e:
+            print(f"Error querying SQLite database: {e}")
+            return []
+
+        if authors_cho_df.empty or acq_timeframe_df.empty:
+            print("No data to merge. One of the DataFrames is empty.")
+            return []
+
         merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
-        print("Merged dataframe\n:", merged)
+        merged[["start date", "end date"]] = merged[["start date", "end date"]].replace("", pd.NA)
+        merged = merged.dropna(subset=["start date", "end date"])
 
-        # check for matching values in the merged df and exclude nan values
-        merged[['start date', 'end date']] = merged[['start date', 'end date']].replace("", pd.NA)
-        merged = merged.dropna(subset=["start date", "end date"]) # non considera le stringhe vuote
-        result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
+        merged["start date"] = pd.to_datetime(merged["start date"], errors="coerce")
+        merged["end date"] = pd.to_datetime(merged["end date"], errors="coerce")
+        result_df = merged[
+            (merged["start date"] >= pd.to_datetime(start)) &
+            (merged["end date"] <= pd.to_datetime(end))
+        ]
 
-        # extend the empty list with the objects of the class person compliant with the query
         for _, row in result_df.iterrows():
             author_uri = row["author"]
             name = row["name"]
             author_id = author_uri.split("/")[-1].replace("_", ":")
             query_result.append(Person(author_id, name))
-        
-        return query_result
 
-    
+        return query_result
