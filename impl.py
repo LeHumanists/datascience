@@ -37,6 +37,7 @@ class Person(IdentifiableEntity):
     def getName(self):
         return self.name
 
+# A L I C E, C A R L A
 class Author(Person):
     def __init__(self, name, identifier=None):
         super().__init__(name)
@@ -108,6 +109,7 @@ class Model(CulturalHeritageObject):
 class Map(CulturalHeritageObject):
     pass
 
+# F R A N C E S C A, M A T I L D E
 class Activity(object):
     def __init__(self, institute, person, tools, start, end, refers_to):
         self.institute = institute
@@ -119,9 +121,6 @@ class Activity(object):
         self.start = start
         self.end = end
         self.refers_to = refers_to
-    
-    """ def __repr__(self):
-        return f"Processing(responsible_institute={self.institute}, responsible_person={self.person}, tool={self.tools}, start_date={self.start}, end_date={self.end}, refers_to={self.refers_to})" """
     
     def getResponsibleInstitute(self):
         return self.institute
@@ -157,9 +156,6 @@ class Acquisition(Activity):
 
         super().__init__(institute, person, tools, start, end, refersTo)
     
-    """ def __repr__(self):
-        return f"Acquisition(responsible_institute={self.institute}, responsible_person={self.person}, tool={self.tools}, start_date={self.start}, end_date={self.end}, refers_to={self.refers_to}, technique={self.technique})" """
-    
     def getTechnique(self):
         return self.technique
 
@@ -193,7 +189,7 @@ class UploadHandler(Handler):
     def pushDataToDb(self, file_path):
         pass
     
-
+# C A R L A
 class MetadataUploadHandler(UploadHandler):
     def __init__(self):
         super().__init__()
@@ -301,7 +297,8 @@ class MetadataUploadHandler(UploadHandler):
         except Exception as e:
             print(f"Error uploading to Blazegraph: {e}")
             return False
-        
+
+
 class ProcessDataUploadHandler(UploadHandler):
     pass
 
@@ -493,6 +490,7 @@ class ProcessDataUploadHandler(UploadHandler):
             print(populated_tables)
             return populated_tables
 
+
 class QueryHandler(Handler):
     def __init__(self, dbPathOrUrl: str = ""):
         super().__init__(dbPathOrUrl)
@@ -500,9 +498,11 @@ class QueryHandler(Handler):
     def getById(self, id: str):
         pass 
 
+# A L I C E, C A R L A
 class MetadataQueryHandler(QueryHandler):
     def __init__(self):
         super().__init__()
+    
     
     def getById(self, id: str) -> DataFrame:
 
@@ -683,6 +683,7 @@ class MetadataQueryHandler(QueryHandler):
 acquisition_sql_df = DataFrame()
 tool_sql_df= DataFrame()
 
+# F R A N C E S C A, M A T I L D E
 def query_rel_db():
     activities = DataFrame()
     with connect("relational.db") as con:
@@ -717,7 +718,7 @@ class ProcessDataQueryHandler(QueryHandler):
         
         return query_rel_db()
 
-
+    # F R A N C E S C A
     def getActivitiesByResponsibleInstitution(self, partialName):
         activities = query_rel_db()
         institution_df = DataFrame()
@@ -736,7 +737,7 @@ class ProcessDataQueryHandler(QueryHandler):
 
         return institution_df
     
-    
+    # F R A N C E S C A 
     def getActivitiesByResponsiblePerson(self, partialName):
         activities = query_rel_db()
         person_df = DataFrame()
@@ -755,7 +756,7 @@ class ProcessDataQueryHandler(QueryHandler):
 
         return person_df
     
-
+    # M A T I L D E
     def getActivitiesStartedAfter(self, date):
         activities = query_rel_db()
         start_date_df = DataFrame()
@@ -766,11 +767,11 @@ class ProcessDataQueryHandler(QueryHandler):
         start_date_df = activities[(activities["start date"] >= date) & (activities["start date"] != '')]
         
         if start_date_df.empty:
-            return "No match found."
+            print("No match found.")
         
         return start_date_df
 
-    
+    # M A T I L D E
     def getActivitiesEndedBefore(self, date):
         activities = query_rel_db()
         end_date_df = DataFrame()
@@ -778,11 +779,11 @@ class ProcessDataQueryHandler(QueryHandler):
         end_date_df = activities[(activities["end date"] <= date) & (activities["end date"] != '')]
         
         if end_date_df.empty:
-            return "No match found."
+            print("No match found.")
         
         return end_date_df
 
-    
+    # F R A N C E S C A
     def getAcquisitionsByTechnique(self, inputtechnique):
         # fetch Acquisition table
         with connect("relational.db") as con:
@@ -794,9 +795,13 @@ class ProcessDataQueryHandler(QueryHandler):
 
         merged_df = pd.merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
         filtered_df = merged_df[merged_df["technique"].str.contains(inputtechnique, case=False, na=False)]
-                    
+
+        if filtered_df.empty:
+            print("No match found")  
+
         return filtered_df
 
+    # F R A N C E S C A
     def getActivitiesUsingTool(self, tool):
         activities = query_rel_db()
         # Normalize the tool string for comparison
@@ -804,16 +809,20 @@ class ProcessDataQueryHandler(QueryHandler):
     
         # Filter rows where the tool column matches the exact or partial tool name
         activities_tool = activities[activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)]
-    
+
+        if activities_tool.empty:
+            print("No match found")
+
         return activities_tool
-    
+
+# C A R L A    
 class BasicMashup(object):
     def __init__(self):
         self.metadataQuery = []  
         self.processQuery = []
 
         # Mapping object types to their corresponding subclasses
-        self.type_mapping = {
+        self.type_mapping = {  # C A R L A
             "Nautical chart": NauticalChart,
             "Manuscript plate": ManuscriptPlate,
             "Manuscript volume": ManuscriptVolume,
@@ -842,7 +851,7 @@ class BasicMashup(object):
         self.processQuery.append(handler)
         return True
 
-    def _createEntityObject(self, entity_data: dict) -> IdentifiableEntity:
+    def _createEntityObject(self, entity_data: dict) -> IdentifiableEntity: # C A R L A
         entity_type = entity_data.get("type", None)
         entity_id = entity_data.get("id")
         if entity_type in self.type_mapping:  # Use the type mapping to determine the correct class
@@ -851,7 +860,7 @@ class BasicMashup(object):
         else:
             return IdentifiableEntity(entity_id)  # Fallback to a generic IdentifiableEntity
 
-    def _createObjectList(self, df: pd.DataFrame) -> List[IdentifiableEntity]:
+    def _createObjectList(self, df: pd.DataFrame) -> List[IdentifiableEntity]: # C A R L A
         object_list = []  # Initialize an empty list for storing objects
         for _, row in df.iterrows():  # Iterate over rows in the DataFrame
             entity_data = row.to_dict()  # Convert each row to a dictionary
@@ -859,7 +868,7 @@ class BasicMashup(object):
             object_list.append(obj)  # Append the created object to the list
         return object_list
     
-    def combineAuthorsOfObjects(self, df, handler):
+    def combineAuthorsOfObjects(self, df, handler):  # A L I C E
         if "authors" in df.columns:
         # Iterate over all rows of the DataFrame
             for idx, row in df.iterrows():
@@ -890,7 +899,7 @@ class BasicMashup(object):
         # Remove duplicate rows and return the modified DataFrame
         return df.drop_duplicates()
 
-    def getEntityById(self, entity_id: str) -> Optional[IdentifiableEntity]:
+    def getEntityById(self, entity_id: str) -> Optional[IdentifiableEntity]:  # C A R L A
         if not self.metadataQuery:  # Return None if no metadata handlers are available
             return None
         for handler in self.metadataQuery:  # Iterate over metadata handlers to query by ID
@@ -907,7 +916,7 @@ class BasicMashup(object):
                 print(f"Error retrieving entity by ID {entity_id} from handler {handler}: {e}")
         return None
 
-    def getAllPeople(self):
+    def getAllPeople(self):   # C A R L A
         person_list = []  # Initialize an empty list for storing people objects
         if self.metadataQuery:  # Check if there are any metadata handlers available
             new_person_df_list = [handler.getAllPeople() for handler in self.metadataQuery]  # Retrieve DataFrames from all handlers
@@ -924,7 +933,7 @@ class BasicMashup(object):
                 ]
         return person_list
 
-    def getAllCulturalHeritageObjects(self):
+    def getAllCulturalHeritageObjects(self):  # A L I C E
         """
         Returns a list of objects of the class CulturalHeritageObject (or its subclasses).
         Integrates related person information into these objects.
@@ -978,7 +987,7 @@ class BasicMashup(object):
 
         return cultural_heritage_objects
     
-    def getAuthorsOfCulturalHeritageObject(self, id: str):
+    def getAuthorsOfCulturalHeritageObject(self, id: str):  # A L I C E
         # Check if there are any available handlers
         if not self.metadataQuery:
             return []  # Return an empty list if there are no handlers available
@@ -1019,7 +1028,7 @@ class BasicMashup(object):
         # Return the list of author objects
         return author_result_list
 
-    def getCulturalHeritageObjectsAuthoredBy(self, authorId: str) -> List[CulturalHeritageObject]:
+    def getCulturalHeritageObjectsAuthoredBy(self, authorId: str) -> List[CulturalHeritageObject]:  # A L I C E
         """
         Returns a list of CulturalHeritageObject instances authored by the person identified by the input ID.
         """
@@ -1048,7 +1057,7 @@ class BasicMashup(object):
         return object_list
 
     # methods for relational db start here
-    
+    # F R A N C E S C A, M A T I L D E
     def getAllActivities(self):
         activities_df = pd.DataFrame()
         activities_df_list = []
@@ -1201,6 +1210,7 @@ def instantiate_class(activity_df):
     
     return activity_list
 
+# M A T I L D E
 def join_tools(activity_df):
     # ensure the tool column in the df has dtype object
     activity_df["tool"] = activity_df["tool"].astype("object")
@@ -1231,7 +1241,7 @@ class AdvancedMashup(BasicMashup):
     def __init__(self):
         super().__init__()  # Inherit initialization from BasicMashup
 
-    def getActivitiesOnObjectsAuthoredBy(self, person_id: str):
+    def getActivitiesOnObjectsAuthoredBy(self, person_id: str):  # C A R L A
         """Retrieve activities related to cultural heritage objects authored by a specific person."""
         activities = []
 
@@ -1273,7 +1283,7 @@ class AdvancedMashup(BasicMashup):
 
         return activities
 
-    def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:
+    def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:  # A L I C E
         """Retrieve cultural heritage objects involved in activities handled by a specific person."""
         objects_list = []
 
@@ -1295,7 +1305,7 @@ class AdvancedMashup(BasicMashup):
 
         return objects_list
 
-    def getObjectsHandledByResponsibleInstitution(self, institution: str) -> list[CulturalHeritageObject]:
+    def getObjectsHandledByResponsibleInstitution(self, institution: str) -> list[CulturalHeritageObject]:  # F R A N C E S C A
         """Retrieve cultural heritage objects involved in activities handled by a specific institution."""
         objects_list = []
 
@@ -1317,7 +1327,7 @@ class AdvancedMashup(BasicMashup):
 
         return objects_list
 
-    def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> list[Person]:
+    def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> list[Person]:  # M A T I L D E
         query_result = []
 
         # SPARQL query

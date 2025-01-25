@@ -124,7 +124,7 @@ class ProcessDataQueryHandler(QueryHandler):
         filtered_df = merged_df[merged_df["technique"].str.contains(inputtechnique, case=False, na=False)]
 
         if filtered_df.empty:
-            print ("No match found")  
+            print("No match found")  
 
         return filtered_df
 
