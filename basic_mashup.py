@@ -104,9 +104,8 @@ class BasicMashup:
         # Checks if the "Author" column exists in the dataframe
         if "authors" in df.columns:
             df_list=[]
-
+            
             for handler in self.metadataQuery: 
-                
                 df_objects= handler.getAllCulturalHeritageObjects(authorId)
                 df_authors= handler.getAllPeople()
 
@@ -129,8 +128,9 @@ class BasicMashup:
                         df_objects["Authors"] = []
 
                 df_list.append(df_objects)
-            # Remove duplicate rows in the dataframe
-            return df.drop_duplicates()  # Return the dataframe without duplicate rows
+        # Remove duplicate rows in the dataframe
+        return df.drop_duplicates()  # Return the dataframe without duplicate rows
+
 
 
 
@@ -253,9 +253,9 @@ class BasicMashup:
                 # Add the processed DataFrame to the df_list
                 df_list.append(df_object_update)  
         
-            # If df_list is empty, return it as an empty list
-            if not df_list:  
-                return df_list  
+        # If df_list is empty, return it as an empty list
+        if not df_list:  
+            return df_list  
     
         # Merge all DataFrames into a single one, remove duplicates, and handle NaN values
         df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")

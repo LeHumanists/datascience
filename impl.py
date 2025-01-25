@@ -500,7 +500,6 @@ class QueryHandler(Handler):
     def getById(self, id: str):
         pass 
 
-    
 class MetadataQueryHandler(QueryHandler):
     def __init__(self):
         super().__init__()
@@ -575,11 +574,6 @@ class MetadataQueryHandler(QueryHandler):
                 f"Error executing SPARQL query on {self.dbPathOrUrl}:\nQuery: {query}\nError: {e}"
             )
             return pd.DataFrame()
-
-class MetadataQueryHandler(QueryHandler):
-    def __init__(self):
-        # Inicializa a classe base sem um endpoint inicialmente
-        super().__init__()
 
     def execute_query(self, query: str) -> pd.DataFrame:
         """
@@ -683,7 +677,8 @@ class MetadataQueryHandler(QueryHandler):
         ORDER BY ?title
         """
         return self.execute_query(query)
-
+    
+    
 acquisition_sql_df = DataFrame()
 tool_sql_df= DataFrame()
 
@@ -713,6 +708,9 @@ def query_rel_db():
 class ProcessDataQueryHandler(QueryHandler):
     def __init__(self, dbPathOrUrl = ""):
         super().__init__(dbPathOrUrl)
+    
+    def getById(self, id: str) -> pd.DataFrame:
+        return pd.DataFrame()
 
     def getAllActivities(self):
         
@@ -724,8 +722,8 @@ class ProcessDataQueryHandler(QueryHandler):
         institution_df = DataFrame()
         # handle empty input strings
         if not partialName:
-            print("The input string is empty.")
-            return institution_df
+           print("The input string is empty.")
+           return institution_df
         else:
             # filter the df based on input string
             cleaned_input = partialName.lower().strip()
@@ -809,9 +807,9 @@ class ProcessDataQueryHandler(QueryHandler):
         return activities_tool
     
 class BasicMashup(object):
-    def __init__(self, metadataQuery=None, processQuery=None):
-        self.metadataQuery = metadataQuery if metadataQuery is not None else []  # Initialize metadataQuery as a list of MetadataQueryHandler
-        self.processQuery = processQuery if processQuery is not None else []     # Initialize processQuery as a list of ProcessorDataQueryHandler
+    def _init_(self):
+        self.metadataQuery = []  
+        self.processQuery = [] 
 
         # Mapping object types to their corresponding subclasses
         self.type_mapping = {
@@ -827,25 +825,21 @@ class BasicMashup(object):
             "Map": Map,
         }
 
-    def cleanMetadataHandlers(self) -> bool:
-        self.metadataQuery.clear()  # Clear the list of metadataQuery handlers
+    def cleanMetadataHandlers(self):
+        self.metadataQuery = [] 
         return True
 
-    def cleanProcessHandlers(self) -> bool:
-        self.processQuery.clear()  # Clear the list of processQuery handlers
+    def cleanProcessHandlers(self):
+        self.processQuery = [] 
         return True
 
-    def addMetadataHandler(self, handler) -> bool:
-        if handler not in self.metadataQuery:  # Add a MetadataQueryHandler object to the metadataQuery list if not already present
-            self.metadataQuery.append(handler)
-            return True
-        return False
+    def addMetadataHandler(self, handler: MetadataQueryHandler) -> bool:
+        self.metadataQuery.append(handler)
+        return True
 
-    def addProcessHandler(self, handler) -> bool:
-        if handler not in self.processQuery:  # Add a ProcessorDataQueryHandler object to the processQuery list if not already present
-            self.processQuery.append(handler)
-            return True
-        return False
+    def addProcessHandler(self, handler: ProcessDataQueryHandler) -> bool:
+        self.processQuery.append(handler)
+        return True
 
     def _createEntityObject(self, entity_data: dict) -> IdentifiableEntity:
         entity_type = entity_data.get("type", None)  # Get the type of the entity from the data
