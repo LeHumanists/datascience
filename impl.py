@@ -497,36 +497,14 @@ class QueryHandler(Handler):
 class MetadataQueryHandler(QueryHandler):
     def __init__(self):
         super().__init__()
-        self.PREFIXES = """
+    
+    def getById(self, id: str) -> DataFrame:
+
+        object_query = f"""
         PREFIX schema: <https://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         PREFIX dcterms: <http://purl.org/dc/terms/>
-        """
 
-    def _execute_sparql(self, query: str) -> pd.DataFrame:
-        if not self.dbPathOrUrl:
-            logging.error("SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
-            return pd.DataFrame()
-
-        try:
-            sparql = SPARQLWrapper(self.dbPathOrUrl)
-            sparql.setQuery(self.PREFIXES + query)
-            sparql.setReturnFormat(JSON)
-            results = sparql.query().convert()
-
-            # Extract data into a DataFrame
-            columns = results["head"]["vars"]
-            rows = [
-                [binding.get(col, {}).get("value", None) for col in columns]
-                for binding in results["results"]["bindings"]
-            ]
-            return pd.DataFrame(rows, columns=columns)
-        except Exception as e:
-            logging.error(f"Error executing SPARQL query on {self.dbPathOrUrl}:\n{e}")
-            return pd.DataFrame()
-
-    def getById(self, id: str) -> pd.DataFrame:
-        object_query = f"""
         SELECT DISTINCT ?id ?type ?title ?dateCreated ?maker ?spatial
         WHERE {{
             ?object dcterms:identifier '{id}' .
@@ -540,6 +518,9 @@ class MetadataQueryHandler(QueryHandler):
         """
 
         person_query = f"""
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
         SELECT DISTINCT ?id ?name ?createdFor
         WHERE {{
             ?person dcterms:identifier '{id}' .
@@ -548,7 +529,6 @@ class MetadataQueryHandler(QueryHandler):
             OPTIONAL {{ ?person dcterms:creator ?createdFor . }}
         }}
         """
-
         # Execute both queries
         object_df = self._execute_sparql(object_query)
         if not object_df.empty:
@@ -558,6 +538,7 @@ class MetadataQueryHandler(QueryHandler):
         if not person_df.empty:
             return person_df
 
+        # Log and return empty DataFrame if no results
         logging.warning(f"No data found for ID: {id}")
         return pd.DataFrame(columns=["id", "type", "title", "dateCreated", "maker", "spatial", "name", "createdFor"])
 
@@ -588,7 +569,6 @@ class MetadataQueryHandler(QueryHandler):
             )
             return pd.DataFrame()
 
-
     def execute_query(self, query: str) -> pd.DataFrame:
         """
         Execute a SPARQL query and return the result as a DataFrame.
@@ -617,7 +597,11 @@ class MetadataQueryHandler(QueryHandler):
 
     
     def getAllPeople(self) -> pd.DataFrame:
+        """
+        Fetch all people from the database.
+        """
         query = """
+        PREFIX dcterms: <http://purl.org/dc/terms/>
         SELECT DISTINCT ?personName ?personID
         WHERE {
             ?object dcterms:creator ?creator .
@@ -626,10 +610,16 @@ class MetadataQueryHandler(QueryHandler):
         }
         ORDER BY ?personName
         """
-        return self._execute_sparql(query)
+        return self.execute_query(query)
 
     def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
+        """
+        Fetch all cultural heritage objects from the database.
+        """
         query = """
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX schema: <http://schema.org/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?id ?title ?date ?owner ?place
         WHERE {
             ?object a <http://dbpedia.org/ontology/CulturalHeritageObject> .
@@ -641,10 +631,15 @@ class MetadataQueryHandler(QueryHandler):
         }
         ORDER BY ?title
         """
-        return self._execute_sparql(query)
+        return self.execute_query(query)
 
     def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame:
+        """
+        Retrieve all authors of a specific cultural heritage object by its ID.
+        """
         query = f"""
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?personName ?personID
         WHERE {{
             ?object dcterms:identifier "{object_id}" ;
@@ -654,10 +649,16 @@ class MetadataQueryHandler(QueryHandler):
         }}
         ORDER BY ?personName
         """
-        return self._execute_sparql(query)
+        return self.execute_query(query)
 
     def getCulturalHeritageObjectsAuthoredBy(self, id_value: str) -> pd.DataFrame:
+        """
+        Retrieve all cultural heritage objects authored by a specific person by their ID.
+        """
         query = f"""
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX schema: <http://schema.org/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?objectID ?title ?date ?owner ?place
         WHERE {{
             ?object dcterms:creator <http://example.org/person/{id_value}> ;
@@ -669,7 +670,8 @@ class MetadataQueryHandler(QueryHandler):
         }}
         ORDER BY ?title
         """
-        return self._execute_sparql(query)
+        return self.execute_query(query)
+    
     
     
 activities = DataFrame()
@@ -784,9 +786,9 @@ class ProcessDataQueryHandler(QueryHandler):
         return activities_tool
     
 class BasicMashup(object):
-    def __init__(self, metadataQuery=None, processQuery=None):
-        self.metadataQuery = metadataQuery if metadataQuery is not None else []  # Initialize metadataQuery as a list of MetadataQueryHandler
-        self.processQuery = processQuery if processQuery is not None else []     # Initialize processQuery as a list of ProcessorDataQueryHandler
+    def _init_(self):
+        self.metadataQuery = []  
+        self.processQuery = [] 
 
         # Mapping object types to their corresponding subclasses
         self.type_mapping = {
@@ -802,25 +804,21 @@ class BasicMashup(object):
             "Map": Map,
         }
 
-    def cleanMetadataHandlers(self) -> bool:
-        self.metadataQuery.clear()  # Clear the list of metadataQuery handlers
+    def cleanMetadataHandlers(self):
+        self.metadataQuery = [] 
         return True
 
-    def cleanProcessHandlers(self) -> bool:
-        self.processQuery.clear()  # Clear the list of processQuery handlers
+    def cleanProcessHandlers(self):
+        self.processQuery = [] 
         return True
 
-    def addMetadataHandler(self, handler) -> bool:
-        if handler not in self.metadataQuery:  # Add a MetadataQueryHandler object to the metadataQuery list if not already present
-            self.metadataQuery.append(handler)
-            return True
-        return False
+    def addMetadataHandler(self, handler: MetadataQueryHandler) -> bool:
+        self.metadataQuery.append(handler)
+        return True
 
-    def addProcessHandler(self, handler) -> bool:
-        if handler not in self.processQuery:  # Add a ProcessorDataQueryHandler object to the processQuery list if not already present
-            self.processQuery.append(handler)
-            return True
-        return False
+    def addProcessHandler(self, handler: ProcessDataQueryHandler) -> bool:
+        self.processQuery.append(handler)
+        return True
 
     def _createEntityObject(self, entity_data: dict) -> IdentifiableEntity:
         entity_type = entity_data.get("type", None)  # Get the type of the entity from the data
