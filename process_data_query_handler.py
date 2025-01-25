@@ -12,7 +12,11 @@ acquisition_sql_df = DataFrame()
 tool_sql_df= DataFrame()
 
 class ProcessDataQueryHandler(QueryHandler):
-    pass
+    def __init__(self, dbPathOrUrl = ""):
+        super().__init__(dbPathOrUrl)
+    
+    def getById(self, id: str) -> pd.DataFrame:
+        return pd.DataFrame()
 
     def getAllActivities(self):
         with connect("relational.db") as con:
