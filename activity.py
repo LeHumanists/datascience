@@ -12,6 +12,9 @@ class Activity(object):
         self.end = end
         self.refers_to = refers_to
     
+    def __repr__(self):
+        return f"Acquisition(responsible_institute={self.institute}, responsible_person={self.person}, tool={self.tools}, start_date={self.start}, end_date={self.end}, refers_to={self.refers_to})"
+    
     def getResponsibleInstitute(self):
         return self.institute
 
@@ -45,6 +48,9 @@ class Acquisition(Activity):
         self.technique = technique
 
         super().__init__(institute, person, tools, start, end, refersTo)
+    
+    def __repr__(self):
+        return f"Acquisition(responsible_institute={self.institute}, responsible_person={self.person}, tool={self.tools}, start_date={self.start}, end_date={self.end}, refers_to={self.refers_to}, technique={self.technique})"
     
     def getTechnique(self):
         return self.technique

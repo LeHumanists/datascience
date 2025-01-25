@@ -60,7 +60,20 @@ mashup = AdvancedMashup()
 mashup.addProcessHandler(process_qh)
 mashup.addMetadataHandler(metadata_qh)
 
-result_q1 = mashup.getAllActivities()
-result_q2 = mashup.getAuthorsOfCulturalHeritageObject("1")
-result_q3 = mashup.getAuthorsOfObjectsAcquiredInTimeFrame("2023-04-01", "2023-05-01")
-# etc...
+""" result_q1 = mashup.getAllActivities()
+print("Result for the first query:", result_q1) """
+#result_q2 = mashup.getAuthorsOfCulturalHeritageObject("1")
+#result_q3 = mashup.getAuthorsOfObjectsAcquiredInTimeFrame("2023-04-01", "2023-05-01")
+# etc..
+""" result_q4 = mashup.getActivitiesByResponsibleInstitution("Stanford")
+print("Result for query by institute", result_q4) """
+""" result_q5 = mashup.getActivitiesByResponsiblePerson("")
+print("Result for query by person", result_q5) """
+""" result_q6 = mashup.getActivitiesStartedAfter("2023-05-08")
+print("Result for the sixth query:", result_q6) """
+""" result_q7 = mashup.getActivitiesEndedBefore("2023-05-08")
+print("Result for the seventh query:", result_q7) """
+""" result_q8 = mashup.getAcquisitionsByTechnique("whatever")
+print("Result for the eighth query:", result_q8) """
+result_q9 = mashup.getActivitiesUsingTool("hammer")
+print("Result for the ninth query:", result_q9)
