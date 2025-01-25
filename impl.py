@@ -660,6 +660,7 @@ class MetadataQueryHandler(QueryHandler):
     def getCulturalHeritageObjectsAuthoredBy(self, id_value: str) -> pd.DataFrame:
         """
         Retrieve all cultural heritage objects authored by a specific person by their ID.
+        Returns a DataFrame.
         """
         query = f"""
         PREFIX dcterms: <http://purl.org/dc/terms/>
@@ -677,8 +678,8 @@ class MetadataQueryHandler(QueryHandler):
         ORDER BY ?title
         """
         return self.execute_query(query)
-    
-    
+        
+        
 acquisition_sql_df = DataFrame()
 tool_sql_df= DataFrame()
 
@@ -709,8 +710,8 @@ class ProcessDataQueryHandler(QueryHandler):
     def __init__(self, dbPathOrUrl = ""):
         super().__init__(dbPathOrUrl)
     
-    """ def getById(self, id: str) -> pd.DataFrame:
-        return pd.DataFrame() """
+    def getById(self, id: str) -> pd.DataFrame:
+        return pd.DataFrame()
 
     def getAllActivities(self):
         
@@ -842,13 +843,13 @@ class BasicMashup(object):
         return True
 
     def _createEntityObject(self, entity_data: dict) -> IdentifiableEntity:
-        entity_type = entity_data.get("type", None)  # Get the type of the entity from the data
-        entity_id = entity_data.get("id")  # Get the ID of the entity from the data
-        if entity_type in self.type_mapping:  # Check if the type is in the mapping and create an instance dynamically
+        entity_type = entity_data.get("type", None)
+        entity_id = entity_data.get("id")
+        if entity_type in self.type_mapping:  # Use the type mapping to determine the correct class
             cls = self.type_mapping[entity_type]
-            return cls(**entity_data)
-        else:  # Return a default IdentifiableEntity instance if no matching type is found
-            return IdentifiableEntity(entity_id)
+            return cls(**entity_data)  # Instantiate the appropriate class
+        else:
+            return IdentifiableEntity(entity_id)  # Fallback to a generic IdentifiableEntity
 
     def _createObjectList(self, df: pd.DataFrame) -> List[IdentifiableEntity]:
         object_list = []  # Initialize an empty list for storing objects
@@ -913,7 +914,14 @@ class BasicMashup(object):
             new_person_df_list = [df for df in new_person_df_list if not df.empty]  # Filter out empty DataFrames
             if new_person_df_list:  # Proceed only if there are valid DataFrames to merge
                 merged_df = pd.concat(new_person_df_list, ignore_index=True).drop_duplicates(subset=["personID"], keep="first")  # Merge and deduplicate DataFrames
-                person_list = [Person(row["personID"], row["personName"]) for _, row in merged_df.iterrows() if row["personID"].strip() and row["personName"].strip()]  # Create Person objects from rows
+                # Safely check for None or empty strings
+                person_list = [
+                    Person(row["personID"], row["personName"])
+                    for _, row in merged_df.iterrows()
+                    if row["personID"] and row["personName"]  # Ensure values are not None or NaN
+                    and str(row["personID"]).strip()  # Convert to string and strip
+                    and str(row["personName"]).strip()
+                ]
         return person_list
 
     def getAllCulturalHeritageObjects(self):
@@ -1011,49 +1019,33 @@ class BasicMashup(object):
         # Return the list of author objects
         return author_result_list
 
-    def getCulturalHeritageObjectsAuthoredBy(self, authorId: str): 
-        # List to collect the final cultural heritage objects      
-        object_result_list = [] 
-        
-        # Check if there are any handlers to query
-        if not self.metadataQuery: 
-            return object_result_list  # Return an empty list if no handlers are available 
-        
-        # List to collect DataFrames to be merged
-        df_list = [] 
-        
-        # Iterate over each handler in self.metadataQuery
-        for handler in self.metadataQuery:  
-            # Retrieve cultural heritage objects authored by the given author
-            df_objects = handler.getCulturalHeritageObjectsAuthoredBy(authorId)  
-            
-            # If the DataFrame is not empty
-            if df_objects is not None and not df_objects.empty:  
-                # Combine author data with cultural heritage objects
-                df_object_update = self.combineAuthorsOfObjects(df_objects, handler)  
-                
-                # Add the processed DataFrame to the df_list
-                df_list.append(df_object_update)  
-        
-        # If df_list is empty, return it as an empty list
-        if not df_list:  
-            return object_result_list  
-        
-        # Merge all DataFrames into a single one, remove duplicates, and handle NaN values
-        df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
-        
-        # Iterate through each row of the merged DataFrame
-        for _, row in df_union.iterrows():
-            # Convert the row to a dictionary
-            entity_data = row.to_dict()
-            
-            # Use the _createEntityObject helper method to create the object
-            obj = self._createEntityObject(entity_data)
-            
-            # Append the created object to the result list
-            object_result_list.append(obj)
+    def getCulturalHeritageObjectsAuthoredBy(self, authorId: str) -> List[CulturalHeritageObject]:
+        """
+        Returns a list of CulturalHeritageObject instances authored by the person identified by the input ID.
+        """
+        if not self.metadataQuery:
+            return []  # No metadata handlers available
 
-        return object_result_list  # Return the list of created objects
+        df_list = []
+        for handler in self.metadataQuery:
+            df = handler.getCulturalHeritageObjectsAuthoredBy(authorId)
+            if not df.empty:
+                df_list.append(df)
+
+        if not df_list:
+            return []  # No data retrieved
+
+        # Combine all DataFrames
+        df_union = pd.concat(df_list, ignore_index=True).drop_duplicates()
+
+        # Convert DataFrame rows to CulturalHeritageObject instances
+        object_list = []
+        for _, row in df_union.iterrows():
+            entity_data = row.to_dict()
+            obj = self._createEntityObject(entity_data)  # Convert row to an appropriate object
+            object_list.append(obj)
+
+        return object_list
 
     # methods for relational db start here
     
