@@ -94,7 +94,7 @@ class ProcessDataQueryHandler(QueryHandler):
         start_date_df = activities[(activities["start date"] >= date) & (activities["start date"] != '')]
         
         if start_date_df.empty:
-            return "No match found."
+            print("No match found.")
         
         return start_date_df
 
@@ -106,7 +106,7 @@ class ProcessDataQueryHandler(QueryHandler):
         end_date_df = activities[(activities["end date"] <= date) & (activities["end date"] != '')]
         
         if end_date_df.empty:
-            return "No match found."
+            print( "No match found.")
         
         return end_date_df
 

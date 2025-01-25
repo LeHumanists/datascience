@@ -120,8 +120,8 @@ class Activity(object):
         self.end = end
         self.refers_to = refers_to
     
-    def __repr__(self):
-        return f"Processing(responsible_institute={self.institute}, responsible_person={self.person}, tool={self.tools}, start_date={self.start}, end_date={self.end}, refers_to={self.refers_to})"
+    """ def __repr__(self):
+        return f"Processing(responsible_institute={self.institute}, responsible_person={self.person}, tool={self.tools}, start_date={self.start}, end_date={self.end}, refers_to={self.refers_to})" """
     
     def getResponsibleInstitute(self):
         return self.institute
@@ -157,8 +157,8 @@ class Acquisition(Activity):
 
         super().__init__(institute, person, tools, start, end, refersTo)
     
-    def __repr__(self):
-        return f"Acquisition(responsible_institute={self.institute}, responsible_person={self.person}, tool={self.tools}, start_date={self.start}, end_date={self.end}, refers_to={self.refers_to}, technique={self.technique})"
+    """ def __repr__(self):
+        return f"Acquisition(responsible_institute={self.institute}, responsible_person={self.person}, tool={self.tools}, start_date={self.start}, end_date={self.end}, refers_to={self.refers_to}, technique={self.technique})" """
     
     def getTechnique(self):
         return self.technique
@@ -709,8 +709,8 @@ class ProcessDataQueryHandler(QueryHandler):
     def __init__(self, dbPathOrUrl = ""):
         super().__init__(dbPathOrUrl)
     
-    def getById(self, id: str) -> pd.DataFrame:
-        return pd.DataFrame()
+    """ def getById(self, id: str) -> pd.DataFrame:
+        return pd.DataFrame() """
 
     def getAllActivities(self):
         
@@ -807,9 +807,9 @@ class ProcessDataQueryHandler(QueryHandler):
         return activities_tool
     
 class BasicMashup(object):
-    def _init_(self):
+    def __init__(self):
         self.metadataQuery = []  
-        self.processQuery = [] 
+        self.processQuery = []
 
         # Mapping object types to their corresponding subclasses
         self.type_mapping = {
@@ -1320,30 +1320,59 @@ class AdvancedMashup(BasicMashup):
         return objects_list
 
     def getAuthorsOfObjectsAcquiredInTimeFrame(self, start: str, end: str) -> list[Person]:
-        """Retrieve authors of cultural heritage objects acquired within a specific timeframe."""
-        authors = []
+        query_result = []
 
-        # SPARQL query logic goes here
-        # Ensure that the logic matches your database and query mechanism.
+        # sparql query
+        endpoint = "http://10.201.7.18:9999/blazegraph/sparql"
+        sparql_query = """
+        PREFIX dcterms: <http://purl.org/dc/terms>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
-        # Example:
-        endpoint = "http://10.201.7.18:9999/blazegraph/sparql"  # Replace with your endpoint
-        sparql_query = f"""
-            PREFIX dcterms: <http://purl.org/dc/terms/>
-            PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-            
-            SELECT ?object ?author ?name 
-            WHERE {{
-                ?author dcterms:creator ?object .
-                ?author foaf:name ?name .
-            }}
+        SELECT ?object ?author ?name
+        WHERE {
+            ?author dcterms:creator ?object .
+            ?author foaf:name ?name .
+        }
         """
-        try:
-            authors_cho_df = get(endpoint, sparql_query, True)
-            # Implement the merging logic with relational data based on your schema.
-        except Exception as e:
-            print(f"Error during SPARQL or SQL execution: {e}")
 
-        return authors
+        authors_cho_df = get(endpoint, sparql_query, True)
+        print("Authors and objects dataframe\n:", authors_cho_df)
+
+         # associate id to each object uri
+        objects_id = []
+        slug = ""
+       
+        for idx, row in authors_cho_df.iterrows(): # http://example.org/1
+            if row["object"]:
+                slug = row["object"].split("/")[-1]
+                objects_id.append("object_" + slug)
+            else:
+                print(f"Warning: No object associated to {authors_cho_df["author"].iloc[idx]}")
+
+        authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
+        print("dataframe with ids\n:", authors_cho_df)
+        
+        # sql query
+        with connect("relational.db") as con:
+            sql_query = "SELECT `start date`, `end date`, `refers_to` FROM Acquisition" 
+            acq_timeframe_df = read_sql(sql_query, con)
+        
+        # merge resulting dataframes
+        merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
+        print("Merged dataframe\n:", merged)
+
+        # check for matching values in the merged df and exclude nan values
+        merged[['start date', 'end date']] = merged[['start date', 'end date']].replace("", pd.NA)
+        merged = merged.dropna(subset=["start date", "end date"]) # non considera le stringhe vuote
+        result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
+
+        # extend the empty list with the objects of the class person compliant with the query
+        for _, row in result_df.iterrows():
+            author_uri = row["author"]
+            name = row["name"]
+            author_id = author_uri.split("/")[-1].replace("_", ":")
+            query_result.append(Person(author_id, name))
+        
+        return query_result
 
     
