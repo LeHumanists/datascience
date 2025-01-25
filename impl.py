@@ -1327,7 +1327,7 @@ class AdvancedMashup(BasicMashup):
 
         return objects_list
     
-    def getAuthorsOfObjectsAcquiredInTimeFrame(self, start, end):  # Returns a list of Person objects
+    def getAuthorsOfObjectsAcquiredInTimeFrame(self, start, end):  # M A T I L D E
         if not self.metadataQuery:  # Check if there are any handlers in the list
             raise ValueError("No MetadataQueryHandler has been added to AdvancedMashup.")
     
