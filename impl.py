@@ -561,6 +561,61 @@ class MetadataQueryHandler(QueryHandler):
         logging.warning(f"No data found for ID: {id}")
         return pd.DataFrame(columns=["id", "type", "title", "dateCreated", "maker", "spatial", "name", "createdFor"])
 
+    def _execute_sparql(self, query: str) -> pd.DataFrame:
+        """
+        Helper method to execute SPARQL queries and return results as a DataFrame.
+        """
+        if not self.dbPathOrUrl:
+            logging.error("SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
+            return pd.DataFrame()
+
+        try:
+            sparql = SPARQLWrapper(self.dbPathOrUrl)
+            sparql.setQuery(query)
+            sparql.setReturnFormat(JSON)
+            results = sparql.query().convert()
+
+            # Extract data into a DataFrame
+            columns = results["head"]["vars"]
+            rows = [
+                [binding.get(col, {}).get("value", None) for col in columns]
+                for binding in results["results"]["bindings"]
+            ]
+            return pd.DataFrame(rows, columns=columns)
+        except Exception as e:
+            logging.error(
+                f"Error executing SPARQL query on {self.dbPathOrUrl}:\nQuery: {query}\nError: {e}"
+            )
+            return pd.DataFrame()
+
+
+    def execute_query(self, query: str) -> pd.DataFrame:
+        """
+        Execute a SPARQL query and return the result as a DataFrame.
+        """
+        if not self.dbPathOrUrl:
+            logging.error("SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
+            return pd.DataFrame()
+
+        try:
+            sparql = SPARQLWrapper(self.dbPathOrUrl)  # Usa o endpoint configurado
+            sparql.setQuery(query)
+            sparql.setReturnFormat(JSON)
+            results = sparql.query().convert()
+
+            # Extrai os dados para um DataFrame
+            columns = results["head"]["vars"]
+            rows = [
+                [binding.get(col, {}).get("value", None) for col in columns]
+                for binding in results["results"]["bindings"]
+            ]
+
+            return pd.DataFrame(rows, columns=columns)
+        except Exception as e:
+            logging.error(f"Error executing SPARQL query on {self.dbPathOrUrl}: {e}")
+            return pd.DataFrame()
+
+    
     def getAllPeople(self) -> pd.DataFrame:
         query = """
         SELECT DISTINCT ?personName ?personID
