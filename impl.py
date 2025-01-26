@@ -298,7 +298,7 @@ class MetadataUploadHandler(UploadHandler):
             print(f"Error uploading to Blazegraph: {e}")
             return False
 
-
+# M A T I L D E
 class ProcessDataUploadHandler(UploadHandler):
     pass
 
@@ -469,6 +469,7 @@ class ProcessDataUploadHandler(UploadHandler):
         merged_tools_df = merge_mv_tables(ac_tools_df, pr_tools_df, md_tools_df, op_tools_df, ex_tools_df)
         print("The merged dataframe:\n", merged_tools_df)
         
+        # F R A N C E S C A
         # pushing tables to db
         with connect("relational.db") as con:
             acquisition_df.to_sql("Acquisition", con, if_exists="replace", index=False)
@@ -1340,7 +1341,7 @@ class AdvancedMashup(BasicMashup):
         authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
         print("Dataframe with IDs:\n", authors_cho_df)
     
-        # Query the relational database
+        # SQL query
         with connect("relational.db") as con:
             sql_query = "SELECT `start date`, `end date`, `refers_to` FROM Acquisition"
             acq_timeframe_df = read_sql(sql_query, con)
