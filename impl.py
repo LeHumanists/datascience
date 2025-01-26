@@ -543,8 +543,8 @@ class MetadataQueryHandler(QueryHandler):
         if not person_df.empty:
             return person_df
 
-        # Log and return empty DataFrame if no results
-        logging.warning(f"No data found for ID: {id}")
+        # Print and return empty DataFrame if no results
+        print(f"No data found for ID: {id}")
         return pd.DataFrame(columns=["id", "type", "title", "dateCreated", "maker", "spatial", "name", "createdFor"])
 
     def execute_query(self, query: str) -> pd.DataFrame:
@@ -570,8 +570,8 @@ class MetadataQueryHandler(QueryHandler):
 
             return pd.DataFrame(rows, columns=columns)
         except Exception as e:
-            logging.error(f"Error executing SPARQL query on {self.dbPathOrUrl}: {e}")
-            return pd.DataFrame()
+                print(f"ERROR: Error executing SPARQL query on {self.dbPathOrUrl}: {e}")
+                return pd.DataFrame()
     
     def getAllPeople(self) -> pd.DataFrame:
         """
@@ -589,6 +589,7 @@ class MetadataQueryHandler(QueryHandler):
         """
         return self.execute_query(query)
 
+    
     def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
         """
         Fetch all cultural heritage objects from the database.
