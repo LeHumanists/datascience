@@ -502,7 +502,8 @@ class QueryHandler(Handler):
 class MetadataQueryHandler(QueryHandler):
     def __init__(self):
         super().__init__()
-    
+
+    # C A R L A
     def getById(self, id: str) -> pd.DataFrame:
         object_query = f"""
         PREFIX schema: <https://schema.org/>
@@ -589,6 +590,7 @@ class MetadataQueryHandler(QueryHandler):
         """
         return self.execute_query(query)
 
+    # A L I C E
     def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
         """
         Fetch all cultural heritage objects from the database.
