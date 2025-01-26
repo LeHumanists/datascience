@@ -554,7 +554,7 @@ class MetadataQueryHandler(QueryHandler):
         Execute a SPARQL query and return the result as a DataFrame.
         """
         if not self.dbPathOrUrl:
-            logging.error("SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
+            print("ERROR: SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
             return pd.DataFrame()
 
         try:
@@ -572,9 +572,9 @@ class MetadataQueryHandler(QueryHandler):
 
             return pd.DataFrame(rows, columns=columns)
         except Exception as e:
-                print(f"ERROR: Error executing SPARQL query on {self.dbPathOrUrl}: {e}")
-                return pd.DataFrame()
-    
+            print(f"ERROR: Error executing SPARQL query on {self.dbPathOrUrl}: {e}")
+            return pd.DataFrame()
+
     def getAllPeople(self) -> pd.DataFrame:
         """
         Fetch all people from the database.
