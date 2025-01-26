@@ -503,9 +503,7 @@ class MetadataQueryHandler(QueryHandler):
     def __init__(self):
         super().__init__()
     
-    
-    def getById(self, id: str) -> DataFrame:
-
+    def getById(self, id: str) -> pd.DataFrame:
         object_query = f"""
         PREFIX schema: <https://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -535,45 +533,19 @@ class MetadataQueryHandler(QueryHandler):
             OPTIONAL {{ ?person dcterms:creator ?createdFor . }}
         }}
         """
+
         # Execute both queries
-        object_df = self._execute_sparql(object_query)
+        object_df = self.execute_query(object_query)
         if not object_df.empty:
             return object_df
 
-        person_df = self._execute_sparql(person_query)
+        person_df = self.execute_query(person_query)
         if not person_df.empty:
             return person_df
 
         # Log and return empty DataFrame if no results
         logging.warning(f"No data found for ID: {id}")
         return pd.DataFrame(columns=["id", "type", "title", "dateCreated", "maker", "spatial", "name", "createdFor"])
-
-    def _execute_sparql(self, query: str) -> pd.DataFrame:
-        """
-        Helper method to execute SPARQL queries and return results as a DataFrame.
-        """
-        if not self.dbPathOrUrl:
-            logging.error("SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
-            return pd.DataFrame()
-
-        try:
-            sparql = SPARQLWrapper(self.dbPathOrUrl)
-            sparql.setQuery(query)
-            sparql.setReturnFormat(JSON)
-            results = sparql.query().convert()
-
-            # Extract data into a DataFrame
-            columns = results["head"]["vars"]
-            rows = [
-                [binding.get(col, {}).get("value", None) for col in columns]
-                for binding in results["results"]["bindings"]
-            ]
-            return pd.DataFrame(rows, columns=columns)
-        except Exception as e:
-            logging.error(
-                f"Error executing SPARQL query on {self.dbPathOrUrl}:\nQuery: {query}\nError: {e}"
-            )
-            return pd.DataFrame()
 
     def execute_query(self, query: str) -> pd.DataFrame:
         """
@@ -600,7 +572,6 @@ class MetadataQueryHandler(QueryHandler):
         except Exception as e:
             logging.error(f"Error executing SPARQL query on {self.dbPathOrUrl}: {e}")
             return pd.DataFrame()
-
     
     def getAllPeople(self) -> pd.DataFrame:
         """
