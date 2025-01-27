@@ -1044,7 +1044,7 @@ class BasicMashup(object):
             print("No processQueryHandler found")
         
         updated_df = join_tools(concat_df_cleaned)
-        print(instantiate_class(updated_df))
+        #print(instantiate_class(updated_df))
         return instantiate_class(updated_df)
         
 
@@ -1063,7 +1063,7 @@ class BasicMashup(object):
             print("No processQueryHandler found")
         
         updated_df = join_tools(concat_df_cleaned)
-        print(instantiate_class(updated_df))
+        #print(instantiate_class(updated_df))
         return instantiate_class(updated_df)
     
 
@@ -1082,7 +1082,7 @@ class BasicMashup(object):
             print("No processQueryHandler found")
         
         updated_df = join_tools(concat_df_cleaned)
-        print(instantiate_class(updated_df))
+        #print(instantiate_class(updated_df))
         return instantiate_class(updated_df)
     
 
@@ -1101,7 +1101,7 @@ class BasicMashup(object):
             print("No processQueryHandler found")
         
         updated_df = join_tools(concat_df_cleaned)
-        print(instantiate_class(updated_df))
+        #print(instantiate_class(updated_df))
         return instantiate_class(updated_df)
     
 
@@ -1120,7 +1120,7 @@ class BasicMashup(object):
             print("No processQueryHandler found")
         
         updated_df = join_tools(concat_df_cleaned)
-        print(instantiate_class(updated_df))
+        #print(instantiate_class(updated_df))
         return instantiate_class(updated_df)
     
 
@@ -1139,7 +1139,7 @@ class BasicMashup(object):
             print("No processQueryHandler found")
 
         updated_df = join_tools(concat_df_cleaned)
-        print(instantiate_class(updated_df))
+        #print(instantiate_class(updated_df))
         return instantiate_class(updated_df)
     
 
@@ -1154,7 +1154,7 @@ class BasicMashup(object):
             print("No processQueryHandler found")
 
         updated_df = join_tools(concat_df_cleaned)
-        print(instantiate_class(updated_df))
+        #print(instantiate_class(updated_df))
         return instantiate_class(updated_df)
     
 
@@ -1298,7 +1298,8 @@ class AdvancedMashup(BasicMashup):
                 objects_list.append(cho)
 
         return objects_list
-    
+
+
     def getAuthorsOfObjectsAcquiredInTimeFrame(self, start, end):  # M A T I L D E
         if not self.metadataQuery:  # Check if there are any handlers in the list
             raise ValueError("No MetadataQueryHandler has been added to AdvancedMashup.")
