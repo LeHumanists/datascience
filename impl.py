@@ -1288,11 +1288,23 @@ class AdvancedMashup(BasicMashup):
         # Retrieve all cultural heritage objects
         all_objects = self.getAllCulturalHeritageObjects()
 
+        # Initialize an empty set to store unique object IDs
+        object_ids = set()
+
+        # Helper function to check if the referred object is valid
+        def is_valid_referred_object(activity):
+            refersTo_cho = getattr(activity, "refersTo_cho", None)
+            return refersTo_cho and hasattr(refersTo_cho, "id")
+
+        # Iterate through activities and gather valid object IDs
+        for activity in activities:
+            if is_valid_referred_object(activity):
+                refersTo_cho = getattr(activity, "refersTo_cho")
+                object_ids.add(refersTo_cho.id)
+
         # Match objects to activities
-        object_ids = {activity.refersTo() for activity in activities if activity.refersTo()} 
-        id = {object_id.getId() for object_id in object_ids}
         for cho in all_objects:
-            if cho.getId() in id:
+            if cho.id in object_ids:
                 objects_list.append(cho)
 
         return objects_list
