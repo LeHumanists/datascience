@@ -239,40 +239,61 @@ class MetadataUploadHandler(UploadHandler):
 
     def _processRow(self, row: pd.Series):
         """Processes a single row and adds RDF triples to the graph."""
-        subj = URIRef(self.example + str(row["Id"]))
-        self.my_graph.add((subj, DCTERMS.identifier, Literal(row["Id"])))
+        try:
+            # Criar o sujeito com base no ID da linha
+            subj = URIRef(self.example + str(row["Id"]))
+            self.my_graph.add((subj, DCTERMS.identifier, Literal(row["Id"])))
+            print(f"Processing ID: {row['Id']}")
 
-        if row.get("Type", "").strip() in self.type_mapping:
-            self.my_graph.add((subj, RDF.type, self.type_mapping[row["Type"].strip()]))
+            # Adicionar o tipo de objeto cultural
+            if row.get("Type", "").strip() in self.type_mapping:
+                self.my_graph.add((subj, RDF.type, self.type_mapping[row["Type"].strip()]))
+                print(f"Added type: {row['Type']}")
 
-        if pd.notna(row.get("Title")):
-            self.my_graph.add((subj, DCTERMS.title, Literal(row["Title"].strip())))
-        if pd.notna(row.get("Date")):
-            self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.string)))
-        if pd.notna(row.get("Owner")):
-            self.my_graph.add((subj, FOAF.maker, Literal(row["Owner"].strip())))
-        if pd.notna(row.get("Place")):
-            self.my_graph.add((subj, DCTERMS.spatial, Literal(row["Place"].strip())))
-            
-        # Process authors
-            authors = row["Author"].split(",") if isinstance(row["Author"], str) else []
-            for author_string in authors:
-                author_string = author_string.strip()
-                
-                # Use regex to find author ID with either VIAF or ULAN
-                author_id_match = re.search(r'\((VIAF|ULAN):(\d+)\)', author_string)  # Match both VIAF and ULAN formats
-                if author_id_match:
-                    id_type = author_id_match.group(1)  # Either 'VIAF' or 'ULAN'
-                    id_value = author_id_match.group(2)  # The numeric ID
-                    person_id = URIRef(f"http://example.org/person/{id_type}_{id_value}")
-                else:
-                    # Fallback to a simple URI based on the author's name if no ID is found
-                    person_id = URIRef(f"http://example.org/person/{author_string.replace(' ', '_')}")
-                
-                # Add the author information to the graph
-                self.my_graph.add((person_id, DCTERMS.creator, subj))
-                self.my_graph.add((person_id, FOAF.name, Literal(author_string, datatype=XSD.string)))
+            # Adicionar título
+            if pd.notna(row.get("Title")):
+                self.my_graph.add((subj, DCTERMS.title, Literal(row["Title"].strip())))
+                print(f"Added title: {row['Title']}")
 
+            # Adicionar data de criação
+            if pd.notna(row.get("Date")):
+                self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.dateTime)))
+                print(f"Added date: {row['Date']}")
+
+            # Adicionar proprietário
+            if pd.notna(row.get("Owner")):
+                self.my_graph.add((subj, FOAF.maker, Literal(row["Owner"].strip())))
+                print(f"Added owner: {row['Owner']}")
+
+            # Adicionar localização
+            if pd.notna(row.get("Place")):
+                self.my_graph.add((subj, DCTERMS.spatial, Literal(row["Place"].strip())))
+                print(f"Added place: {row['Place']}")
+
+            # Processar os autores da linha
+            if "Author" in row and pd.notna(row["Author"]):
+                authors = row["Author"].split(",") if isinstance(row["Author"], str) else []
+                for author_string in authors:
+                    author_string = author_string.strip()
+
+                    # Verificar se há um identificador VIAF ou ULAN no autor
+                    author_id_match = re.search(r'\((VIAF|ULAN):(\d+)\)', author_string)
+                    if author_id_match:
+                        id_type = author_id_match.group(1)  # VIAF ou ULAN
+                        id_value = author_id_match.group(2)  # O ID numérico
+                        person_id = URIRef(f"http://example.org/person/{id_type}_{id_value}")
+                    else:
+                        # Fallback para URI baseado no nome do autor
+                        person_id = URIRef(f"http://example.org/person/{author_string.replace(' ', '_')}")
+
+                    # Adicionar o autor ao grafo
+                    self.my_graph.add((person_id, DCTERMS.creator, subj))
+                    self.my_graph.add((person_id, FOAF.name, Literal(author_string)))
+                    print(f"Added author: {author_string}, ID: {person_id}")
+
+        except Exception as e:
+            print(f"Error processing row: {row}. Exception: {e}")
+        
     def _uploadGraphToBlazegraph(self) -> bool:
         """Uploads the RDF graph to Blazegraph."""
         if not self.dbPathOrUrl:
@@ -1277,7 +1298,7 @@ class AdvancedMashup(BasicMashup):
 
         return objects_list
 
-    def getObjectsHandledByResponsibleInstitution(self, institution: str) -> list[CulturalHeritageObject]:  # F R A N C E S C A
+    def getObjectsHandledByResponsibleInstitution(self, institution: str) -> list[CulturalHeritageObject]:
         """Retrieve cultural heritage objects involved in activities handled by a specific institution."""
         objects_list = []
 
@@ -1292,7 +1313,13 @@ class AdvancedMashup(BasicMashup):
         all_objects = self.getAllCulturalHeritageObjects()
 
         # Match objects to activities
-        object_ids = {activity.refersTo_cho.id for activity in activities if activity.refersTo_cho}
+        object_ids = set()
+        for activity in activities:
+            # Accedi a refersTo_cho in modo robusto
+            refersTo_cho = getattr(activity, "refersTo_cho", None)
+            if refersTo_cho and hasattr(refersTo_cho, "id"):
+                object_ids.add(refersTo_cho.id)
+
         for cho in all_objects:
             if cho.id in object_ids:
                 objects_list.append(cho)

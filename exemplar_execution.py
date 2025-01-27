@@ -60,8 +60,8 @@ mashup = AdvancedMashup()
 mashup.addProcessHandler(process_qh)
 mashup.addMetadataHandler(metadata_qh)
 
-result_q1 = mashup.getAllActivities()
-print("Result for the first query:", result_q1)
+result_q1 = mashup.getObjectsHandledByResponsibleInstitution("Philology")
+print("Result for ObjectsHandledByResponsibleInstitution", result_q1)
 #result_q2 = mashup.getAuthorsOfCulturalHeritageObject("1")
 #result_q3 = mashup.getAuthorsOfObjectsAcquiredInTimeFrame("2023-04-01", "2023-05-01")
 # etc..
