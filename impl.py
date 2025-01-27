@@ -121,7 +121,7 @@ class Activity(object):
         self.start = start
         self.end = end
         self.refers_to = refers_to
-    
+
     def getResponsibleInstitute(self):
         return self.institute
 
@@ -133,7 +133,7 @@ class Activity(object):
 
     def getTools(self):
         # it returns a list of strings
-        return self.tool
+        return self.tools
 
     def getStartDate(self):
         if self.start:
@@ -151,10 +151,10 @@ class Activity(object):
         return CulturalHeritageObject
 
 class Acquisition(Activity):
-    def __init__(self, institute, person, tools, start, end, refersTo, technique):
+    def __init__(self, institute, person, tools, start, end, refers_to, technique):
         self.technique = technique
 
-        super().__init__(institute, person, tools, start, end, refersTo)
+        super().__init__(institute, person, tools, start, end, refers_to)
     
     def getTechnique(self):
         return self.technique
@@ -338,7 +338,7 @@ class ProcessDataUploadHandler(UploadHandler):
         optimising = data_from_json(json_data, "optimising")
         exporting = data_from_json(json_data, "exporting")
 
-        print("Acquisition list:\n", acquisition)
+        #print("Acquisition list:\n", acquisition)
 
         # function for populating dataframes from lists
         def populateDf(process_list): 
@@ -357,8 +357,8 @@ class ProcessDataUploadHandler(UploadHandler):
         optimising_df = populateDf(optimising)
         exporting_df = populateDf(exporting)
 
-        print("Acquisition dataframe:\n", acquisition_df)
-        print("Acquisition dataframe info:", acquisition_df.info())
+        """ print("Acquisition dataframe:\n", acquisition_df)
+        print("Acquisition dataframe info:", acquisition_df.info()) """
 
         # create unique identifiers and append id column to df
         def createUniqueId(process_df, df_name):
@@ -380,13 +380,13 @@ class ProcessDataUploadHandler(UploadHandler):
         createUniqueId(optimising_df, "optimising")
         createUniqueId(exporting_df, "exporting")
 
-        print("Acquisition df with unique ids:\n", acquisition_df)
+       # print("Acquisition df with unique ids:\n", acquisition_df)
 
         # remove multi-valued attributes from df
         def keep_single_valued(process_df):
-            # dtypes stores a series where the first column lists the index for the Series (the column names) and the second one the datatype for each column
             dtypes = process_df.dtypes
-            print(isinstance(dtypes, pd.Series))
+            #print(isinstance(dtypes, pd.Series))
+
             # iterate over the columns in the Series
             for column_name, datatype in dtypes.items():
                 # if the column has datatype object...
@@ -405,9 +405,9 @@ class ProcessDataUploadHandler(UploadHandler):
         modelling_df, modelling_multi_valued = keep_single_valued(modelling_df)
         optimising_df, optimising_multi_valued = keep_single_valued(optimising_df)
         exporting_df, exporting_multi_valued = keep_single_valued(exporting_df)
-        print("Acquisition df and multi-valued df:\n", acquisition_df, acquisition_multi_valued)
+        """ print("Acquisition df and multi-valued df:\n", acquisition_df, acquisition_multi_valued)
         print(acquisition_df.info())
-        print(acquisition_multi_valued.info())
+        print(acquisition_multi_valued.info()) """
         
         # create multi-valued attributes tables
         def create_multi_valued_tables(multi_valued_df):
@@ -416,7 +416,7 @@ class ProcessDataUploadHandler(UploadHandler):
                 # populate dictionary with unique identifiers as keys and lists of tools as values
                 tools_dict[row.iloc[0]] = ast.literal_eval(row.iloc[1]) if isinstance(row.iloc[1], str) else row.iloc[1]
 
-            print(tools_dict)
+            #print(tools_dict)
 
             tools_unpacked = []
             identifiers_unpacked = []
@@ -430,7 +430,7 @@ class ProcessDataUploadHandler(UploadHandler):
                     for t in tool_list:
                         tools_unpacked.append(t)
 
-            print("list for tools:\n", tools_unpacked)
+            #print("list for tools:\n", tools_unpacked)
 
             # iterate over the list of identifiers
             for identifier in tools_dict.keys():
@@ -444,11 +444,11 @@ class ProcessDataUploadHandler(UploadHandler):
 
             print("list for identifiers:\n", identifiers_unpacked)
 
-            # create a list that contains the two series and join them in a dataframe where each series is a column
+            # create series and join them in a dataframe where each series is a column
             tools_series = pd.Series(tools_unpacked, dtype="string", name="tool")
             identifiers_series = pd.Series(identifiers_unpacked, dtype="string", name="unique_id")
             tools_df = pd.concat([identifiers_series, tools_series], axis=1)
-            print("The dataframe for tools:\n", tools_df)
+            #print("The dataframe for tools:\n", tools_df)
             
             return tools_df
 
@@ -467,7 +467,7 @@ class ProcessDataUploadHandler(UploadHandler):
         
         # function calls
         merged_tools_df = merge_mv_tables(ac_tools_df, pr_tools_df, md_tools_df, op_tools_df, ex_tools_df)
-        print("The merged dataframe:\n", merged_tools_df)
+        #print("The merged dataframe:\n", merged_tools_df)
         
         # F R A N C E S C A
         # pushing tables to db
@@ -653,11 +653,11 @@ class MetadataQueryHandler(QueryHandler):
         """
         return self.execute_query(query)
         
-        
+# F R A N C E S C A, M A T I L D E        
 acquisition_sql_df = DataFrame()
 tool_sql_df= DataFrame()
 
-# F R A N C E S C A, M A T I L D E
+
 def query_rel_db():
     activities = DataFrame()
     with connect("relational.db") as con:
@@ -734,9 +734,6 @@ class ProcessDataQueryHandler(QueryHandler):
     def getActivitiesStartedAfter(self, date):
         activities = query_rel_db()
         start_date_df = DataFrame()
-
-        activities.columns = activities.columns.str.strip()
-        print("Columns in the activities df:", activities.columns)
 
         start_date_df = activities[(activities["start date"] >= date) & (activities["start date"] != '')]
         
@@ -1327,7 +1324,7 @@ class AdvancedMashup(BasicMashup):
     
         # Execute the SPARQL query
         authors_cho_df = get(endpoint, sparql_query, True)
-        print("Authors and objects dataframe:\n", authors_cho_df)
+        #print("Authors and objects dataframe:\n", authors_cho_df)
     
         # Associate IDs to object URIs
         objects_id = []
@@ -1339,7 +1336,7 @@ class AdvancedMashup(BasicMashup):
                 print(f"Warning: No object associated to {authors_cho_df['author'].iloc[idx]}")
     
         authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
-        print("Dataframe with IDs:\n", authors_cho_df)
+        #print("Dataframe with IDs:\n", authors_cho_df)
     
         # SQL query
         with connect("relational.db") as con:
@@ -1348,7 +1345,7 @@ class AdvancedMashup(BasicMashup):
     
         # Merge the resulting dataframes
         merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
-        print("Merged dataframe:\n", merged)
+        #print("Merged dataframe:\n", merged)
     
         # Filter rows based on the time range
         merged[['start date', 'end date']] = merged[['start date', 'end date']].replace("", pd.NA)
