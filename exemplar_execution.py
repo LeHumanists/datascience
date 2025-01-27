@@ -38,7 +38,7 @@ process.pushDataToDb("data/process.json")
 
 # Then, create the graph database (remember first to run the
 # Blazegraph instance) using the related source data
-grp_endpoint = "http://127.0.0.1:9999/blazegraph/sparql"
+grp_endpoint = "http://192.168.1.100:9999/blazegraph/sparql"
 metadata = MetadataUploadHandler()
 metadata.setDbPathOrUrl(grp_endpoint)
 metadata.pushDataToDb("data/meta.csv")
@@ -60,7 +60,8 @@ mashup = AdvancedMashup()
 mashup.addProcessHandler(process_qh)
 mashup.addMetadataHandler(metadata_qh)
 
-result_q1 = mashup.getAllActivities()
+result_q1 = mashup.getCulturalHeritageObjectsAuthoredBy("VIAF:100190422")
+print ("result for getCulturalHeritageObjectsAuthoredBy", result_q1)
 result_q2 = mashup.getAuthorsOfCulturalHeritageObject("1")
 result_q3 = mashup.getAuthorsOfObjectsAcquiredInTimeFrame("2023-04-01", "2023-05-01")
 # etc..

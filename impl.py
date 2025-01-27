@@ -256,7 +256,7 @@ class MetadataUploadHandler(UploadHandler):
 
             # Adicionar data de criação
             if pd.notna(row.get("Date")):
-                self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.dateTime)))
+                self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.string)))
                 print(f"Added date: {row['Date']}")
 
             # Adicionar proprietário
@@ -530,45 +530,27 @@ class MetadataQueryHandler(QueryHandler):
         PREFIX schema: <https://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 
         SELECT DISTINCT ?id ?type ?title ?dateCreated ?maker ?spatial
         WHERE {{
-            ?object dcterms:identifier '{id}' .
-            ?object dcterms:identifier ?id .
-            ?object rdf:type ?type .
-            OPTIONAL {{ ?object dcterms:title ?title . }}
-            OPTIONAL {{ ?object schema:dateCreated ?dateCreated . }}
-            OPTIONAL {{ ?object foaf:maker ?maker . }}
-            OPTIONAL {{ ?object dcterms:spatial ?spatial . }}
+            <http://example.org/{id}> dcterms:identifier ?id .
+            <http://example.org/{id}> rdf:type ?type .
+            OPTIONAL {{ <http://example.org/{id}> dcterms:title ?title . }}
+            OPTIONAL {{ <http://example.org/{id}> schema:dateCreated ?dateCreated . }}
+            OPTIONAL {{ <http://example.org/{id}> foaf:maker ?maker . }}
+            OPTIONAL {{ <http://example.org/{id}> dcterms:spatial ?spatial . }}
         }}
         """
 
-        person_query = f"""
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-
-        SELECT DISTINCT ?id ?name ?createdFor
-        WHERE {{
-            ?person dcterms:identifier '{id}' .
-            ?person dcterms:identifier ?id .
-            ?person foaf:name ?name .
-            OPTIONAL {{ ?person dcterms:creator ?createdFor . }}
-        }}
-        """
-
-        # Execute both queries
+        # Execute the query and return the DataFrame
         object_df = self.execute_query(object_query)
         if not object_df.empty:
             return object_df
 
-        person_df = self.execute_query(person_query)
-        if not person_df.empty:
-            return person_df
-
-        # Print and return empty DataFrame if no results
         print(f"No data found for ID: {id}")
-        return pd.DataFrame(columns=["id", "type", "title", "dateCreated", "maker", "spatial", "name", "createdFor"])
-
+        return pd.DataFrame(columns=["id", "type", "title", "dateCreated", "maker", "spatial"])
+    
     def execute_query(self, query: str) -> pd.DataFrame:
         """
         Execute a SPARQL query and return the result as a DataFrame.
@@ -577,35 +559,46 @@ class MetadataQueryHandler(QueryHandler):
             print("ERROR: SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
             return pd.DataFrame()
 
+        print(f"Executing query on endpoint: {self.dbPathOrUrl}")
+        print(f"Query being sent:\n{query}")
+
         try:
-            sparql = SPARQLWrapper(self.dbPathOrUrl)  # Usa o endpoint configurado
+            sparql = SPARQLWrapper(self.dbPathOrUrl)
             sparql.setQuery(query)
             sparql.setReturnFormat(JSON)
-            results = sparql.query().convert()
 
-            # Extrai os dados para um DataFrame
+            print("Sending query...")
+            results = sparql.query().convert()
+            print("Query executed successfully!")
+
+            # Extract data into a DataFrame
             columns = results["head"]["vars"]
+            print(f"Columns in the result: {columns}")
             rows = [
                 [binding.get(col, {}).get("value", None) for col in columns]
                 for binding in results["results"]["bindings"]
             ]
+            print(f"Rows retrieved: {rows}")
 
             return pd.DataFrame(rows, columns=columns)
-        except Exception as e:
-            print(f"ERROR: Error executing SPARQL query on {self.dbPathOrUrl}: {e}")
-            return pd.DataFrame()
 
+        except Exception as e:
+            print(f"ERROR: Failed to execute SPARQL query. Exception: {e}")
+            return pd.DataFrame()
+        
     def getAllPeople(self) -> pd.DataFrame:
         """
-        Fetch all people from the database.
+        Fetch all people (authors) from the database.
         """
         query = """
         PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
         SELECT DISTINCT ?personName ?personID
         WHERE {
-            ?object dcterms:creator ?creator .
-            BIND (STRAFTER(?creator, "(") AS ?personID) .
-            BIND (STRBEFORE(?creator, " (") AS ?personName) .
+            ?object dcterms:creator ?person .
+            ?person foaf:name ?personName .
+            BIND(STRAFTER(STR(?person), "http://example.org/person/") AS ?personID)
         }
         ORDER BY ?personName
         """
@@ -618,16 +611,30 @@ class MetadataQueryHandler(QueryHandler):
         """
         query = """
         PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX schema: <http://schema.org/>
+        PREFIX schema: <https://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-        SELECT DISTINCT ?id ?title ?date ?owner ?place
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+        SELECT DISTINCT ?id ?type ?title ?date ?owner ?place
         WHERE {
-            ?object a <http://dbpedia.org/ontology/CulturalHeritageObject> .
-            ?object dcterms:identifier ?id .
-            ?object dcterms:title ?title .
-            ?object schema:dateCreated ?date .
-            ?object foaf:maker ?owner .
-            ?object dcterms:spatial ?place .
+            ?object rdf:type ?type ;
+                    dcterms:identifier ?id ;
+                    dcterms:title ?title .
+            OPTIONAL { ?object schema:dateCreated ?date . }
+            OPTIONAL { ?object foaf:maker ?owner . }
+            OPTIONAL { ?object dcterms:spatial ?place . }
+            FILTER(?type IN (
+                <https://dbpedia.org/resource/Nautical_chart>,
+                <http://example.org/ManuscriptPlate>,
+                <https://dbpedia.org/resource/Category:Manuscripts_by_collection>,
+                <https://schema.org/PublicationVolume>,
+                <http://example.org/PrintedMaterial>,
+                <https://dbpedia.org/resource/Herbarium>,
+                <https://dbpedia.org/resource/Specimen>,
+                <https://dbpedia.org/resource/Category:Painting>,
+                <https://dbpedia.org/resource/Category:Prototypes>,
+                <https://dbpedia.org/resource/Category:Maps>
+            ))
         }
         ORDER BY ?title
         """
@@ -636,16 +643,18 @@ class MetadataQueryHandler(QueryHandler):
     def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame:
         """
         Retrieve all authors of a specific cultural heritage object by its ID.
+        Returns a DataFrame.
         """
         query = f"""
         PREFIX dcterms: <http://purl.org/dc/terms/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
         SELECT DISTINCT ?personName ?personID
         WHERE {{
-            ?object dcterms:identifier "{object_id}" ;
-                    dcterms:creator ?creator .
-            ?creator foaf:name ?personName .
-            BIND(STR(?creator) AS ?personID)
+            ?object dcterms:identifier "{object_id}" .
+            ?object dcterms:creator ?person .
+            ?person foaf:name ?personName .
+            BIND(STRAFTER(STR(?person), "http://example.org/person/") AS ?personID)
         }}
         ORDER BY ?personName
         """
@@ -658,7 +667,7 @@ class MetadataQueryHandler(QueryHandler):
         """
         query = f"""
         PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX schema: <http://schema.org/>
+        PREFIX schema: <https://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?objectID ?title ?date ?owner ?place
         WHERE {{
@@ -672,7 +681,7 @@ class MetadataQueryHandler(QueryHandler):
         ORDER BY ?title
         """
         return self.execute_query(query)
-        
+    
 # F R A N C E S C A, M A T I L D E        
 acquisition_sql_df = DataFrame()
 tool_sql_df= DataFrame()
@@ -1232,48 +1241,41 @@ class AdvancedMashup(BasicMashup):
     def __init__(self):
         super().__init__()  # Inherit initialization from BasicMashup
 
-    def getActivitiesOnObjectsAuthoredBy(self, person_id: str):  # C A R L A
-        """Retrieve activities related to cultural heritage objects authored by a specific person."""
+    class AdvancedMashup(BasicMashup):
+        def __init__(self):
+            super().__init__()
+
+    def getActivitiesOnObjectsAuthoredBy(self, person_id: str) -> List[Activity]:
+        """
+        Returns a list of activities referring to cultural heritage objects authored by the specified person.
+        Each activity must be an instance of the appropriate subclass of Activity.
+        """
+        if not self.metadataQuery or not self.processQuery:
+            print("ERROR: Missing metadataQuery or processQuery handlers.")
+            return []
+
+        # Step 1: Retrieve cultural heritage objects authored by the person
+        cultural_objects = self.getCulturalHeritageObjectsAuthoredBy(person_id)
+        if not cultural_objects:
+            print(f"No cultural heritage objects found for person {person_id}.")
+            return []
+
+        # Extract object IDs to filter activities
+        object_ids = [obj.id for obj in cultural_objects]
+
+        # Step 2: Retrieve activities referring to the cultural heritage objects
         activities = []
-
-        # Validate inputs
-        if not person_id or not self.metadataQuery or not self.processQuery:
-            print("Error: Missing person_id, metadataQuery, or processQuery.")
-            return activities
-
-        # Retrieve cultural heritage objects authored by the person
-        authored_objects = []
-        for metadata_handler in self.metadataQuery:
+        for handler in self.processQuery:
             try:
-                authored_objects.extend(metadata_handler.getCulturalHeritageObjectsAuthoredBy(person_id))
+                # Fetch activities referring to the specific objects
+                df_activities = handler.getActivitiesReferringToObjects(object_ids)
+                if not df_activities.empty:
+                    activities.extend(instantiate_class(df_activities))
             except Exception as e:
-                print(f"Error querying authored objects from metadata handler: {e}")
-
-        if not authored_objects:
-            return activities  # No authored objects found, return empty list
-
-        # Debug: Check authored_objects content
-        print("Authored objects:", authored_objects)
-        print("Types in authored_objects:", [type(obj) for obj in authored_objects])
-
-        # Retrieve all activities
-        all_activities = []
-        for process_handler in self.processQuery:
-            try:
-                all_activities.extend(process_handler.getAllActivities())
-            except Exception as e:
-                print(f"Error querying activities from process handler: {e}")
-
-        # Match activities to authored objects
-        authored_object_ids = {
-            obj.getId() for obj in authored_objects if hasattr(obj, "getId")
-        }
-        for activity in all_activities:
-            if any(object_id in activity.getRelatedObjectIds() for object_id in authored_object_ids):
-                activities.append(activity)
+                print(f"Error retrieving activities for objects authored by {person_id}: {e}")
 
         return activities
-
+    
     def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:  # A L I C E
         """Retrieve cultural heritage objects involved in activities handled by a specific person."""
         objects_list = []
