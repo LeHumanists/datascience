@@ -132,7 +132,6 @@ class Activity(object):
             return None
 
     def getTools(self):
-        # it returns a list of strings
         return self.tools
 
     def getStartDate(self):
@@ -982,7 +981,7 @@ class BasicMashup(object):
     def getAuthorsOfCulturalHeritageObject(self, id: str):  # A L I C E
         # Check if there are any available handlers
         if not self.metadataQuery:
-            return []  # Return an empty list if there are no handlers available
+            return [] 
     
         # List to store valid DataFrames retrieved from each handler
         df_list = []
@@ -1354,7 +1353,7 @@ class AdvancedMashup(BasicMashup):
     
         # Execute the SPARQL query
         authors_cho_df = get(endpoint, sparql_query, True)
-        print("Authors and objects dataframe:\n", authors_cho_df)
+        #print("Authors and objects dataframe:\n", authors_cho_df)
     
         # Associate IDs to object URIs
         objects_id = []
@@ -1366,7 +1365,7 @@ class AdvancedMashup(BasicMashup):
                 print(f"Warning: No object associated to {authors_cho_df['author'].iloc[idx]}")
     
         authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
-        print("Dataframe with IDs:\n", authors_cho_df)
+        #print("Dataframe with IDs:\n", authors_cho_df)
     
         # SQL query
         with connect("relational.db") as con:
@@ -1376,7 +1375,7 @@ class AdvancedMashup(BasicMashup):
 
         # Merge the resulting dataframes
         merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
-        print("Merged dataframe:\n", merged)
+        #print("Merged dataframe:\n", merged)
     
         # Filter rows based on the time range
         merged[['start date', 'end date']] = merged[['start date', 'end date']].replace("", pd.NA)
