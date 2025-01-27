@@ -820,20 +820,18 @@ class BasicMashup(object):
     def __init__(self):
         self.metadataQuery = []  
         self.processQuery = []
-
-        # Mapping object types to their corresponding subclasses
-        self.type_mapping = {  # C A R L A
-            "Nautical chart": NauticalChart,
-            "Manuscript plate": ManuscriptPlate,
-            "Manuscript volume": ManuscriptVolume,
-            "Printed volume": PrintedVolume,
-            "Printed material": PrintedMaterial,
-            "Herbarium": Herbarium,
-            "Specimen": Specimen,
-            "Painting": Painting,
-            "Model": Model,
-            "Map": Map,
-        }
+        self.metadata_type_mapping = {
+        "https://dbpedia.org/resource/Nautical_chart": NauticalChart,
+        "http://example.org/ManuscriptPlate": ManuscriptPlate,
+        "https://dbpedia.org/resource/Category:Manuscripts_by_collection": ManuscriptVolume,
+        "https://schema.org/PublicationVolume": PrintedVolume,
+        "http://example.org/PrintedMaterial": PrintedMaterial,
+        "https://dbpedia.org/resource/Herbarium": Herbarium,
+        "https://dbpedia.org/resource/Specimen": Specimen,
+        "https://dbpedia.org/resource/Category:Painting": Painting,
+        "https://dbpedia.org/resource/Category:Prototypes": Model,
+        "https://dbpedia.org/resource/Category:Maps": Map,
+    }
 
     def cleanMetadataHandlers(self):
         self.metadataQuery = [] 
@@ -851,14 +849,23 @@ class BasicMashup(object):
         self.processQuery.append(handler)
         return True
 
-    def _createEntityObject(self, entity_data: dict) -> IdentifiableEntity: # C A R L A
+    def _createEntityObject(self, entity_data: dict) -> CulturalHeritageObject:
+        # Retrieve the entity type from the data, which comes from the SPARQL query as a URI
         entity_type = entity_data.get("type", None)
+        # Extract additional attributes from the data
         entity_id = entity_data.get("id")
-        if entity_type in self.type_mapping:  # Use the type mapping to determine the correct class
-            cls = self.type_mapping[entity_type]
-            return cls(**entity_data)  # Instantiate the appropriate class
+        title = entity_data.get("title", "")
+        date = entity_data.get("dateCreated", "")
+        owner = entity_data.get("maker", "")
+        place = entity_data.get("spatial", "")
+
+        # Check if the entity type is mapped to a specific class
+        if entity_type in self.metadata_type_mapping:
+            cls = self.metadata_type_mapping[entity_type]  # Get the corresponding class
+            return cls(entity_id, title, date, owner, place)  # Instantiate and return the class
         else:
-            return IdentifiableEntity(entity_id)  # Fallback to a generic IdentifiableEntity
+            # If the type is not mapped, return a generic CulturalHeritageObject
+            return CulturalHeritageObject(entity_id, title, date, owner, place)
 
     def _createObjectList(self, df: pd.DataFrame) -> List[IdentifiableEntity]: # C A R L A
         object_list = []  # Initialize an empty list for storing objects
@@ -900,39 +907,54 @@ class BasicMashup(object):
         return df.drop_duplicates()
 
     def getEntityById(self, entity_id: str) -> Optional[IdentifiableEntity]:  # C A R L A
-        if not self.metadataQuery:  # Return None if no metadata handlers are available
+            if not self.metadataQuery:  # Return None if no metadata handlers are available
+                return None
+            for handler in self.metadataQuery:  # Iterate over metadata handlers to query by ID
+                try:
+                    df = handler.getById(entity_id)  # Query data using the handler and retrieve as a DataFrame
+                    if not df.empty:  # Check if the DataFrame is not empty
+                        if 'type' in df.columns:  # Check for Cultural Heritage Objects based on 'type'
+                            cho_list = self._createObjectList(df)
+                            if cho_list:
+                                return cho_list[0]  # Return the first matching object
+                        elif 'name' in df.columns and 'id' in df.columns:  # Handle Person instances based on 'name' and 'id'
+                            return Person(df.iloc[0]["id"], df.iloc[0]["name"])
+                except Exception as e:  # Print an error message if querying fails
+                    print(f"Error retrieving entity by ID {entity_id} from handler {handler}: {e}")
             return None
-        for handler in self.metadataQuery:  # Iterate over metadata handlers to query by ID
-            try:
-                df = handler.getById(entity_id)  # Query data using the handler and retrieve as a DataFrame
-                if not df.empty:  # Check if the DataFrame is not empty
-                    if 'type' in df.columns:  # Check for Cultural Heritage Objects based on 'type'
-                        cho_list = self._createObjectList(df)
-                        if cho_list:
-                            return cho_list[0]  # Return the first matching object
-                    elif 'name' in df.columns and 'id' in df.columns:  # Handle Person instances based on 'name' and 'id'
-                        return Person(df.iloc[0]["id"], df.iloc[0]["name"])
-            except Exception as e:  # Print an error message if querying fails
-                print(f"Error retrieving entity by ID {entity_id} from handler {handler}: {e}")
-        return None
 
     def getAllPeople(self):   # C A R L A
         person_list = []  # Initialize an empty list for storing people objects
-        if self.metadataQuery:  # Check if there are any metadata handlers available
-            new_person_df_list = [handler.getAllPeople() for handler in self.metadataQuery]  # Retrieve DataFrames from all handlers
-            new_person_df_list = [df for df in new_person_df_list if not df.empty]  # Filter out empty DataFrames
-            if new_person_df_list:  # Proceed only if there are valid DataFrames to merge
-                merged_df = pd.concat(new_person_df_list, ignore_index=True).drop_duplicates(subset=["personID"], keep="first")  # Merge and deduplicate DataFrames
-                # Safely check for None or empty strings
-                person_list = [
-                    Person(row["personID"], row["personName"])
-                    for _, row in merged_df.iterrows()
-                    if row["personID"] and row["personName"]  # Ensure values are not None or NaN
-                    and str(row["personID"]).strip()  # Convert to string and strip
-                    and str(row["personName"]).strip()
-                ]
-        return person_list
 
+        if self.metadataQuery:  # Check if there are any metadata handlers available
+            # Collect DataFrames from all handlers
+            person_df_list = [handler.getAllPeople() for handler in self.metadataQuery]
+            person_df_list = [df for df in person_df_list if not df.empty]  # Filter out empty DataFrames
+
+            if person_df_list:  # Proceed only if there are valid DataFrames
+                merged_df = pd.concat(person_df_list, ignore_index=True).drop_duplicates(
+                    subset=["personID"], keep="first"
+                )
+
+                # Process each row to create Person or Author objects
+                for _, row in merged_df.iterrows():
+                    person_id = row.get("personID")
+                    person_name = row.get("personName")
+
+                    if person_id and person_name:  # Ensure values are valid
+                        person_name = str(person_name).strip()
+                        person_id = str(person_id).strip()
+
+                        # Determine if the person is an Author with VIAF or ULAN ID
+                        if re.match(r'(VIAF|ULAN)_\d+', person_id):
+                            person_list.append(Author(person_name, identifier=person_id))
+                        else:
+                            person_list.append(Person(person_name))
+
+        print(f"Total unique people identified: {len(person_list)}")
+        return person_list
+    
+    
     def getAllCulturalHeritageObjects(self):  # A L I C E
         """
         Returns a list of objects of the class CulturalHeritageObject (or its subclasses).
