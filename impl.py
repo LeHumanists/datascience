@@ -442,7 +442,7 @@ class ProcessDataUploadHandler(UploadHandler):
                     for n in range(list_length):
                         identifiers_unpacked.append(identifier)
 
-            print("list for identifiers:\n", identifiers_unpacked)
+            #print("list for identifiers:\n", identifiers_unpacked)
 
             # create series and join them in a dataframe where each series is a column
             tools_series = pd.Series(tools_unpacked, dtype="string", name="tool")
@@ -488,7 +488,7 @@ class ProcessDataUploadHandler(UploadHandler):
             rel_db_tl = pd.read_sql("SELECT * FROM Tools", con)
 
             populated_tables = not any(df.empty for df in [rel_db_ac, rel_db_pr, rel_db_op, rel_db_md, rel_db_ex, rel_db_tl]) # add rel_db_tl
-            print(populated_tables)
+            #print(populated_tables)
             return populated_tables
 
 
@@ -1299,7 +1299,8 @@ class AdvancedMashup(BasicMashup):
 
         return objects_list
 
-
+    authors_cho_df = pd.DataFrame()
+    acq_timeframe_df = pd.DataFrame()
     def getAuthorsOfObjectsAcquiredInTimeFrame(self, start, end):  # M A T I L D E
         if not self.metadataQuery:  # Check if there are any handlers in the list
             raise ValueError("No MetadataQueryHandler has been added to AdvancedMashup.")
@@ -1326,7 +1327,7 @@ class AdvancedMashup(BasicMashup):
     
         # Execute the SPARQL query
         authors_cho_df = get(endpoint, sparql_query, True)
-        #print("Authors and objects dataframe:\n", authors_cho_df)
+        print("Authors and objects dataframe:\n", authors_cho_df)
     
         # Associate IDs to object URIs
         objects_id = []
@@ -1338,16 +1339,17 @@ class AdvancedMashup(BasicMashup):
                 print(f"Warning: No object associated to {authors_cho_df['author'].iloc[idx]}")
     
         authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
-        #print("Dataframe with IDs:\n", authors_cho_df)
+        print("Dataframe with IDs:\n", authors_cho_df)
     
         # SQL query
         with connect("relational.db") as con:
             sql_query = "SELECT `start date`, `end date`, `refers_to` FROM Acquisition"
             acq_timeframe_df = read_sql(sql_query, con)
-    
+        print("Acquisition dataframe:", acq_timeframe_df)
+
         # Merge the resulting dataframes
         merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
-        #print("Merged dataframe:\n", merged)
+        print("Merged dataframe:\n", merged)
     
         # Filter rows based on the time range
         merged[['start date', 'end date']] = merged[['start date', 'end date']].replace("", pd.NA)
