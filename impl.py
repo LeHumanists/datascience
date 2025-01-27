@@ -1269,9 +1269,10 @@ class AdvancedMashup(BasicMashup):
         all_objects = self.getAllCulturalHeritageObjects()
 
         # Match objects to activities
-        object_ids = {activity.refersTo_cho.id for activity in activities if activity.refersTo_cho}
+        object_ids = {activity.refersTo() for activity in activities if activity.refersTo()} 
+        id = {object_id.getId() for object_id in object_ids}
         for cho in all_objects:
-            if cho.id in object_ids:
+            if cho.getId() in id:
                 objects_list.append(cho)
 
         return objects_list
