@@ -818,7 +818,7 @@ class BasicMashup(object):
     def __init__(self):
         self.metadataQuery = []  
         self.processQuery = []
-        self.metadata_type_mapping = {
+        self.type_mapping = {
         "https://dbpedia.org/resource/Nautical_chart": NauticalChart,
         "http://example.org/ManuscriptPlate": ManuscriptPlate,
         "https://dbpedia.org/resource/Category:Manuscripts_by_collection": ManuscriptVolume,
