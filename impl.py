@@ -1263,10 +1263,6 @@ class AdvancedMashup(BasicMashup):
     def __init__(self):
         super().__init__()  # Inherit initialization from BasicMashup
 
-    class AdvancedMashup(BasicMashup):
-        def __init__(self):
-            super().__init__()
-
     def getActivitiesOnObjectsAuthoredBy(self, person_id: str) -> List[Activity]:
         """
         Returns a list of activities referring to cultural heritage objects authored by the specified person.
