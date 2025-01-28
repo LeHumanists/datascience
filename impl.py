@@ -239,53 +239,51 @@ class MetadataUploadHandler(UploadHandler):
     def _processRow(self, row: pd.Series):
         """Processes a single row and adds RDF triples to the graph."""
         try:
-            # Criar o sujeito com base no ID da linha
+            # Create the subject
             subj = URIRef(self.example + str(row["Id"]))
             self.my_graph.add((subj, DCTERMS.identifier, Literal(row["Id"])))
             print(f"Processing ID: {row['Id']}")
 
-            # Adicionar o tipo de objeto cultural
+            # add the type
             if row.get("Type", "").strip() in self.type_mapping:
                 self.my_graph.add((subj, RDF.type, self.type_mapping[row["Type"].strip()]))
                 print(f"Added type: {row['Type']}")
 
-            # Adicionar título
+            # Add title
             if pd.notna(row.get("Title")):
                 self.my_graph.add((subj, DCTERMS.title, Literal(row["Title"].strip())))
                 print(f"Added title: {row['Title']}")
 
-            # Adicionar data de criação
+            # Add creation date
             if pd.notna(row.get("Date")):
                 self.my_graph.add((subj, self.schema.dateCreated, Literal(row["Date"], datatype=XSD.string)))
                 print(f"Added date: {row['Date']}")
 
-            # Adicionar proprietário
+            # Add owner
             if pd.notna(row.get("Owner")):
                 self.my_graph.add((subj, FOAF.maker, Literal(row["Owner"].strip())))
                 print(f"Added owner: {row['Owner']}")
 
-            # Adicionar localização
+            # Add place
             if pd.notna(row.get("Place")):
                 self.my_graph.add((subj, DCTERMS.spatial, Literal(row["Place"].strip())))
                 print(f"Added place: {row['Place']}")
 
-            # Processar os autores da linha
+            # Process authors
             if "Author" in row and pd.notna(row["Author"]):
                 authors = row["Author"].split(",") if isinstance(row["Author"], str) else []
                 for author_string in authors:
                     author_string = author_string.strip()
 
-                    # Verificar se há um identificador VIAF ou ULAN no autor
                     author_id_match = re.search(r'\((VIAF|ULAN):(\d+)\)', author_string)
                     if author_id_match:
                         id_type = author_id_match.group(1)  # VIAF ou ULAN
                         id_value = author_id_match.group(2)  # O ID numérico
                         person_id = URIRef(f"http://example.org/person/{id_type}_{id_value}")
                     else:
-                        # Fallback para URI baseado no nome do autor
                         person_id = URIRef(f"http://example.org/person/{author_string.replace(' ', '_')}")
 
-                    # Adicionar o autor ao grafo
+                    # Add author to graph
                     self.my_graph.add((person_id, DCTERMS.creator, subj))
                     self.my_graph.add((person_id, FOAF.name, Literal(author_string)))
                     print(f"Added author: {author_string}, ID: {person_id}")
