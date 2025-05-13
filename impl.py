@@ -1396,7 +1396,7 @@ class AdvancedMashup(BasicMashup):
                 slug = row["object"].split("/")[-1]
                 objects_id.append("object_" + slug)
             else:
-                print(f"Warning: No object associated to {authors_cho_df["author"].iloc[idx]}")
+                print(f"Warning: No object associated to {authors_cho_df['author'].iloc[idx]}")
 
         authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
         print("dataframe with ids\n:", authors_cho_df)
