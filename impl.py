@@ -1385,7 +1385,7 @@ class AdvancedMashup(BasicMashup):
     
         # Execute the SPARQL query
         authors_cho_df = get(endpoint, sparql_query, True)
-        #print("Authors and objects dataframe:\n", authors_cho_df)
+        print("Authors and objects dataframe:\n", authors_cho_df)
     
         # Associate IDs to object URIs
         objects_id = []
@@ -1397,7 +1397,7 @@ class AdvancedMashup(BasicMashup):
                 print(f"Warning: No object associated to {authors_cho_df['author'].iloc[idx]}")
     
         authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
-        #print("Dataframe with IDs:\n", authors_cho_df)
+        print("Dataframe with IDs:\n", authors_cho_df)
 
         # retrieve data from rel db
         process_qh = self.processQuery[0]
@@ -1408,7 +1408,7 @@ class AdvancedMashup(BasicMashup):
 
         # Merge the resulting dataframes
         result_df = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
-        #print("Merged dataframe:\n", merged)
+        print("Merged dataframe:\n", result_df)
     
         # Create a list of Person objects for the result
         for _, row in result_df.iterrows():

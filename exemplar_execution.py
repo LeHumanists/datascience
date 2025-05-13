@@ -60,8 +60,10 @@ mashup = AdvancedMashup()
 mashup.addProcessHandler(process_qh)
 mashup.addMetadataHandler(metadata_qh)
 
-result_q1 = mashup.getCulturalHeritageObjectsAuthoredBy("VIAF:100190422")
+""" result_q1 = mashup.getCulturalHeritageObjectsAuthoredBy("VIAF:100190422")
 print ("result for getCulturalHeritageObjectsAuthoredBy", result_q1)
-result_q2 = mashup.getAuthorsOfCulturalHeritageObject("1")
+result_q2 = mashup.getAuthorsOfCulturalHeritageObject("1") """
 result_q3 = mashup.getAuthorsOfObjectsAcquiredInTimeFrame("2023-04-01", "2023-05-01")
+print("result for getCulturalHeritageObjectsAuthoredBy", result_q3)
 # etc..
+
