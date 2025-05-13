@@ -1355,7 +1355,6 @@ class AdvancedMashup(BasicMashup):
             raise ValueError("The endpoint has not been set in the MetadataQueryHandler.")
 
         # sparql query
-        endpoint = "http://10.201.7.18:9999/blazegraph/sparql"
         sparql_query = """
         PREFIX dcterms: <http://purl.org/dc/terms>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
