@@ -109,7 +109,7 @@ class Model(CulturalHeritageObject):
 class Map(CulturalHeritageObject):
     pass
 
-# F R A N C E S C A, M A T I L D E
+# F R A N C E S C A,  M A T I L D E
 class Activity(object):
     def __init__(self, institute, person, tools, start, end, refers_to):
         self.institute = institute
@@ -121,7 +121,7 @@ class Activity(object):
         self.start = start
         self.end = end
         self.refers_to = refers_to
-
+            
     def getResponsibleInstitute(self):
         return self.institute
 
@@ -316,10 +316,11 @@ class MetadataUploadHandler(UploadHandler):
             print(f"Error uploading to Blazegraph: {e}")
             return False
 
-# M A T I L D E
+# F R A N C E S C A,  M A T I L D E
 class ProcessDataUploadHandler(UploadHandler):
     pass
 
+    # M A T I L D E
     # the method of ProcessDataUploadHandler that pushes data to the rel db
     def pushDataToDb(self, file_path):
 
@@ -680,7 +681,7 @@ class MetadataQueryHandler(QueryHandler):
         """
         return self.execute_query(query)
     
-# F R A N C E S C A, M A T I L D E        
+# F R A N C E S C A,  M A T I L D E        
 acquisition_sql_df = DataFrame()
 tool_sql_df= DataFrame()
 
@@ -705,7 +706,7 @@ def query_rel_db():
     activities = pd.concat([df_dict["Acquisition"], df_dict["Processing"], df_dict["Modelling"], df_dict["Optimising"], df_dict["Exporting"]], ignore_index=True)
     tool_sql_df = df_dict["Tools"]
     activities = pd.merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
-
+    print("the complete df:", activities)
     return activities
 
 class ProcessDataQueryHandler(QueryHandler):
@@ -1077,7 +1078,7 @@ class BasicMashup(object):
         return object_list
 
     # methods for relational db start here
-    # F R A N C E S C A, M A T I L D E
+    # F R A N C E S C A,  M A T I L D E
     def getAllActivities(self):
         activities_df = pd.DataFrame()
         activities_df_list = []
@@ -1227,11 +1228,11 @@ def instantiate_class(activity_df):
             class_to_use = activity_mapping.get(activity_from_id)
             activity_obj = class_to_use(row["responsible institute"], row["responsible person"], row["tool"], row["start date"], row["end date"], row["refers_to"])
             activity_list.append(activity_obj)
-    
+
     return activity_list
 
 # M A T I L D E
-def join_tools(activity_df):
+def join_tools(activity_df): 
     # ensure the tool column in the df has dtype object
     activity_df["tool"] = activity_df["tool"].astype("object")
     #print(activity_df["tool"].apply(type).unique())
@@ -1355,31 +1356,32 @@ class AdvancedMashup(BasicMashup):
 
         return objects_list
 
+    # M A T I L D E
     authors_cho_df = pd.DataFrame()
     acq_timeframe_df = pd.DataFrame()
-    def getAuthorsOfObjectsAcquiredInTimeFrame(self, start, end):  # M A T I L D E
-        if not self.metadataQuery:  # Check if there are any handlers in the list
-            raise ValueError("No MetadataQueryHandler has been added to AdvancedMashup.")
+    def getAuthorsOfObjectsAcquiredInTimeFrame(self, start, end):  
+        if not self.metadataQuery or not self.processQuery:  # Check if there are any handlers in the list
+            raise ValueError("No handlers added to AdvancedMashup.")
     
         query_result = []
     
-        # Dynamically retrieve the endpoint from the first MetadataQueryHandler
-        metadata_handler = self.metadataQuery[0]  # Use the first handler
-        endpoint = metadata_handler.getDbPathOrUrl()
+        # retrieve the endpoint from the first MetadataQueryHandler
+        metadata_qh = self.metadataQuery[0]  # Use the first handler
+        endpoint = metadata_qh.getDbPathOrUrl()
         if not endpoint:
             raise ValueError("The endpoint has not been set in the MetadataQueryHandler.")
     
         # SPARQL query
         sparql_query = """
-        PREFIX dcterms: <http://purl.org/dc/terms>
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+            PREFIX dcterms: <http://purl.org/dc/terms>
+            PREFIX foaf: <http://xmlns.com/foaf/0.1/>
     
-        SELECT ?object ?author ?name
-        WHERE {
-            ?author dcterms:creator ?object .
-            ?author foaf:name ?name .
-        }
-        """
+            SELECT ?object ?author ?name
+            WHERE {
+                ?author dcterms:creator ?object .
+                ?author foaf:name ?name .
+            }
+            """
     
         # Execute the SPARQL query
         authors_cho_df = get(endpoint, sparql_query, True)
@@ -1396,21 +1398,17 @@ class AdvancedMashup(BasicMashup):
     
         authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
         #print("Dataframe with IDs:\n", authors_cho_df)
-    
-        # SQL query
-        with connect("relational.db") as con:
-            sql_query = "SELECT `start date`, `end date`, `refers_to` FROM Acquisition"
-            acq_timeframe_df = read_sql(sql_query, con)
-        print("Acquisition dataframe:", acq_timeframe_df)
+
+        # retrieve data from rel db
+        process_qh = self.processQuery[0]
+        started_after_df = process_qh.getActivitiesStartedAfter(start)
+        ended_before_df = process_qh.getActivitiesEndedBefore(end)
+        timeframe_df = pd.merge(started_after_df, ended_before_df, left_on="unique_id", right_on="unique_id", how="inner")
+        acq_timeframe_df = timeframe_df[timeframe_df["unique_id"].str.strip().str.contains("acquisition")]
 
         # Merge the resulting dataframes
-        merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
+        result_df = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
         #print("Merged dataframe:\n", merged)
-    
-        # Filter rows based on the time range
-        merged[['start date', 'end date']] = merged[['start date', 'end date']].replace("", pd.NA)
-        merged = merged.dropna(subset=["start date", "end date"])
-        result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
     
         # Create a list of Person objects for the result
         for _, row in result_df.iterrows():
