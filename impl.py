@@ -227,16 +227,16 @@ class MetadataUploadHandler(UploadHandler):
 
             # Process each row into RDF triples
             for _, row in df.iterrows():
-                self._processRow(row)
+                self.processRow(row)
 
             # Upload the graph to Blazegraph
-            return self._uploadGraphToBlazegraph()
+            return self.uploadGraphToBlazegraph()
 
         except Exception as e:
             print(f"Error processing CSV file {file_path}: {e}")
             return False
 
-    def _processRow(self, row: pd.Series):
+    def processRow(self, row: pd.Series):
         """Processes a single row and adds RDF triples to the graph."""
         try:
             # Create the subject
@@ -269,21 +269,22 @@ class MetadataUploadHandler(UploadHandler):
                 self.my_graph.add((subj, DCTERMS.spatial, Literal(row["Place"].strip())))
                 print(f"Added place: {row['Place']}")
 
-            # Process authors
+            # Process the authors in the line
             if "Author" in row and pd.notna(row["Author"]):
-                authors = row["Author"].split(",") if isinstance(row["Author"], str) else []
+                # Split authors by semicolon (;) instead of comma (,)
+                authors = row["Author"].split(";") if isinstance(row["Author"], str) else []
+                
                 for author_string in authors:
                     author_string = author_string.strip()
 
-                    author_id_match = re.search(r'\((VIAF|ULAN):(\d+)\)', author_string)
+                    author_id_match = re.search(r'\(([\w\-]+):([\w\-]+)\)', author_string)
                     if author_id_match:
-                        id_type = author_id_match.group(1)  # VIAF ou ULAN
-                        id_value = author_id_match.group(2)  # O ID numérico
+                        id_type = author_id_match.group(1)
+                        id_value = author_id_match.group(2)
                         person_id = URIRef(f"http://example.org/person/{id_type}_{id_value}")
                     else:
                         person_id = URIRef(f"http://example.org/person/{author_string.replace(' ', '_')}")
 
-                    # Add author to graph
                     self.my_graph.add((person_id, DCTERMS.creator, subj))
                     self.my_graph.add((person_id, FOAF.name, Literal(author_string)))
                     print(f"Added author: {author_string}, ID: {person_id}")
@@ -291,7 +292,7 @@ class MetadataUploadHandler(UploadHandler):
         except Exception as e:
             print(f"Error processing row: {row}. Exception: {e}")
         
-    def _uploadGraphToBlazegraph(self) -> bool:
+    def uploadGraphToBlazegraph(self) -> bool:
         """Uploads the RDF graph to Blazegraph."""
         if not self.dbPathOrUrl:
             print("Error: SPARQL endpoint is not set. Use setDbPathOrUrl to configure it.")
@@ -848,7 +849,7 @@ class BasicMashup(object):
         self.processQuery.append(handler)
         return True
 
-    def _createEntityObject(self, entity_data: dict) -> CulturalHeritageObject:
+    def createEntityObject(self, entity_data: dict) -> CulturalHeritageObject:
         # Retrieve the entity type from the data, which comes from the SPARQL query as a URI
         entity_type = entity_data.get("type", None)
         # Extract additional attributes from the data
@@ -859,18 +860,18 @@ class BasicMashup(object):
         place = entity_data.get("spatial", "")
 
         # Check if the entity type is mapped to a specific class
-        if entity_type in self.metadata_type_mapping:
-            cls = self.metadata_type_mapping[entity_type]  # Get the corresponding class
+        if entity_type in self.type_mapping:
+            cls = self.type_mapping[entity_type] # Get the corresponding class
             return cls(entity_id, title, date, owner, place)  # Instantiate and return the class
         else:
             # If the type is not mapped, return a generic CulturalHeritageObject
             return CulturalHeritageObject(entity_id, title, date, owner, place)
 
-    def _createObjectList(self, df: pd.DataFrame) -> List[IdentifiableEntity]: # C A R L A
+    def createObjectList(self, df: pd.DataFrame) -> List[IdentifiableEntity]: # C A R L A
         object_list = []  # Initialize an empty list for storing objects
         for _, row in df.iterrows():  # Iterate over rows in the DataFrame
             entity_data = row.to_dict()  # Convert each row to a dictionary
-            obj = self._createEntityObject(entity_data)  # Create an object using _createEntityObject
+            obj = self.createEntityObject(entity_data)  # Create an object using createEntityObject
             object_list.append(obj)  # Append the created object to the list
         return object_list
     
@@ -913,7 +914,7 @@ class BasicMashup(object):
                     df = handler.getById(entity_id)  # Query data using the handler and retrieve as a DataFrame
                     if not df.empty:  # Check if the DataFrame is not empty
                         if 'type' in df.columns:  # Check for Cultural Heritage Objects based on 'type'
-                            cho_list = self._createObjectList(df)
+                            cho_list = self.createObjectList(df)
                             if cho_list:
                                 return cho_list[0]  # Return the first matching object
                         elif 'name' in df.columns and 'id' in df.columns:  # Handle Person instances based on 'name' and 'id'
@@ -1072,7 +1073,7 @@ class BasicMashup(object):
         object_list = []
         for _, row in df_union.iterrows():
             entity_data = row.to_dict()
-            obj = self._createEntityObject(entity_data)  # Convert row to an appropriate object
+            obj = self.createEntityObject(entity_data)  # Convert row to an appropriate object
             object_list.append(obj)
 
         return object_list
@@ -1263,36 +1264,18 @@ class AdvancedMashup(BasicMashup):
         super().__init__()  # Inherit initialization from BasicMashup
 
     def getActivitiesOnObjectsAuthoredBy(self, person_id: str) -> List[Activity]:
-        """
-        Returns a list of activities referring to cultural heritage objects authored by the specified person.
-        Each activity must be an instance of the appropriate subclass of Activity.
-        """
         if not self.metadataQuery or not self.processQuery:
-            print("ERROR: Missing metadataQuery or processQuery handlers.")
             return []
 
-        # Step 1: Retrieve cultural heritage objects authored by the person
-        cultural_objects = self.getCulturalHeritageObjectsAuthoredBy(person_id)
-        if not cultural_objects:
-            print(f"No cultural heritage objects found for person {person_id}.")
+        authored_objects = self.getCulturalHeritageObjectsAuthoredBy(person_id)
+        if not authored_objects:
             return []
 
-        # Extract object IDs to filter activities
-        object_ids = [obj.id for obj in cultural_objects]
+        authored_ids = set(obj.getId() for obj in authored_objects)
+        all_activities = self.getAllActivities()
 
-        # Step 2: Retrieve activities referring to the cultural heritage objects
-        activities = []
-        for handler in self.processQuery:
-            try:
-                # Fetch activities referring to the specific objects
-                df_activities = handler.getActivitiesReferringToObjects(object_ids)
-                if not df_activities.empty:
-                    activities.extend(instantiate_class(df_activities))
-            except Exception as e:
-                print(f"Error retrieving activities for objects authored by {person_id}: {e}")
-
-        return activities
-    
+        return [act for act in all_activities if act.refers_to in authored_ids]
+        
     def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:  # A L I C E
         """Retrieve cultural heritage objects involved in activities handled by a specific person."""
         objects_list = []
