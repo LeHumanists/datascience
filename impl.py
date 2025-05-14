@@ -1,6 +1,6 @@
 import ast
 import pandas as pd
-import json  # Importazione del modulo standard json
+import json
 import pprint
 from pandas import DataFrame
 from pandas import Series
@@ -111,11 +111,11 @@ class Map(CulturalHeritageObject):
 
 # F R A N C E S C A,  M A T I L D E
 class Activity(object):
-    def __init__(self, institute, person, tools, start, end, refers_to):
+    def __init__(self, institute, person, tool, start, end, refers_to):
         self.institute = institute
         self.person = person
         self.tools = list()
-        for t in tools:
+        for t in tool:
             self.tools.append(t)
 
         self.start = start
@@ -132,8 +132,11 @@ class Activity(object):
             return None
 
     def getTools(self):
-        return self.tools
-
+        result = set()
+        for t in self.tools:
+            result.add(t)
+        return result 
+    
     def getStartDate(self):
         if self.start:
             return self.start
@@ -169,7 +172,7 @@ class Optimising(Activity):
 
 class Exporting(Activity):
     pass
-
+    
 class Handler(object):
     def __init__(self, dbPathOrUrl=""):
         self.dbPathOrUrl = dbPathOrUrl
@@ -416,7 +419,7 @@ class ProcessDataUploadHandler(UploadHandler):
                     multi_valued[column_name].astype("object")
                     process_df.drop("tool", axis=1, inplace=True)
 
-            # return the df and the popped column
+            # return the df and the subdataframe
             return process_df, multi_valued
     
         # function calls
@@ -764,10 +767,15 @@ class ProcessDataQueryHandler(QueryHandler):
         activities = query_rel_db()
         start_date_df = DataFrame()
 
-        start_date_df = activities[(activities["start date"] >= date) & (activities["start date"] != '')]
+        # missing inputs
+        if not date:
+            print("The input string is empty.")
+            return start_date_df
+        else:
+            start_date_df = activities[(activities["start date"] >= date) & (activities["start date"] != '')]
         
-        if start_date_df.empty:
-            print("No match found.")
+            if start_date_df.empty:
+                print("No match found.")
         
         return start_date_df
 
@@ -776,10 +784,15 @@ class ProcessDataQueryHandler(QueryHandler):
         activities = query_rel_db()
         end_date_df = DataFrame()
 
-        end_date_df = activities[(activities["end date"] <= date) & (activities["end date"] != '')]
+        # missing inputs
+        if not date:
+            print("The input string is empty.")
+            return end_date_df
+        else:
+            end_date_df = activities[(activities["end date"] <= date) & (activities["end date"] != '')]
         
-        if end_date_df.empty:
-            print("No match found.")
+            if end_date_df.empty:
+                print("No match found.")
         
         return end_date_df
 
@@ -1090,11 +1103,13 @@ class BasicMashup(object):
 
             concat_df = pd.concat(activities_df_list, ignore_index=True)
             concat_df_cleaned = concat_df.drop_duplicates() # drop only identical rows
+            #print("Concatened df cleaned:", concat_df_cleaned)
         
         else:
             print("No processQueryHandler found")
         
         updated_df = join_tools(concat_df_cleaned)
+        #print("Updated df:", updated_df)
         #print(instantiate_class(updated_df))
         return instantiate_class(updated_df)
         
