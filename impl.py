@@ -807,7 +807,7 @@ class ProcessDataQueryHandler(QueryHandler):
             tool_sql_df = read_sql(query2, con)
 
         merged_df = pd.merge(acquisition_sql_df, tool_sql_df, on="unique_id", how="inner")
-        filtered_df = merged_df[merged_df["technique"].str.contains(inputtechnique, case=False, na=False)]
+        filtered_df = merged_df[merged_df["technique"].str.strip().str.contains(inputtechnique, case=False, na=False)]
 
         if filtered_df.empty:
             print("No match found")  
@@ -821,7 +821,7 @@ class ProcessDataQueryHandler(QueryHandler):
         tool_lower = tool.lower()
     
         # Filter rows where the tool column matches the exact or partial tool name
-        activities_tool = activities[activities['tool'].str.lower().str.contains(tool_lower,  case=False, na=False)]
+        activities_tool = activities[activities['tool'].str.strip().str.lower().str.contains(tool_lower, case=False, na=False)]
 
         if activities_tool.empty:
             print("No match found")
