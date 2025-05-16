@@ -1405,7 +1405,8 @@ class AdvancedMashup(BasicMashup):
         SELECT ?object ?author ?name
         WHERE {
             ?object dcterms:identifier ?id .
-            OPTIONAL { ?author dcterms:creator ?object . ?author foaf:name ?name . }
+            OPTIONAL { ?author dcterms:creator ?object . }
+            OPTIONAL { ?author foaf:name ?name . }
         }
         """
 
