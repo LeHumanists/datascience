@@ -172,7 +172,7 @@ class Optimising(Activity):
 
 class Exporting(Activity):
     pass
-    
+
 class Handler(object):
     def __init__(self, dbPathOrUrl=""):
         self.dbPathOrUrl = dbPathOrUrl
@@ -710,7 +710,7 @@ def query_rel_db():
     activities = pd.concat([df_dict["Acquisition"], df_dict["Processing"], df_dict["Modelling"], df_dict["Optimising"], df_dict["Exporting"]], ignore_index=True)
     tool_sql_df = df_dict["Tools"]
     activities = pd.merge(activities, tool_sql_df, left_on="unique_id", right_on="unique_id")
-    print("the complete df:", activities)
+    #print("the complete df:", activities)
     return activities
 
 class ProcessDataQueryHandler(QueryHandler):
@@ -1222,8 +1222,33 @@ class BasicMashup(object):
         updated_df = join_tools(concat_df_cleaned)
         #print(instantiate_class(updated_df))
         return instantiate_class(updated_df)
-    
 
+ch_object = ""
+def get_CHO(id):
+    global ch_object
+    cho_mapping = {
+        "Nautical chart": NauticalChart,
+        "Manuscript plate": ManuscriptPlate,
+        "Manuscript volume": ManuscriptVolume,
+        "Printed volume": PrintedVolume,
+        "Printed material": PrintedMaterial,
+        "Herbarium": Herbarium,
+        "Specimen": Specimen,
+        "Painting": Painting,
+        "Model": Model,
+        "Map": Map
+    }
+
+    metadata_qh = MetadataQueryHandler()
+    cho_df = metadata_qh.getAllCulturalHeritageObjects()
+    print("The dataframe from getAllCulturalHeritageObjects:", cho_df)
+    for idx, row in cho_df.iterrows():
+        if row["Id"] == id:
+            class_to_use = cho_mapping.get(row["type"])
+            ch_object = class_to_use(row["id"], row["title"], row["date"], row["owner"], row["place"])
+
+    return ch_object
+    
 def instantiate_class(activity_df):
     activity_list = []
     activity_mapping = {
@@ -1234,15 +1259,19 @@ def instantiate_class(activity_df):
         "exporting": Exporting
     }
     #print("The input activity df:", activity_df)
+    #print("Length of input activity df:", len(activity_df))
     for idx, row in activity_df.iterrows():
+        split_refers_to = row["refers_to"].split("_")
+        obj_id = split_refers_to[-1]
+        #print(obj_id)
         activity_from_id = re.sub("_\\d+", "", row["unique_id"])
         #print("The current activity:", activity_from_id)
         if activity_from_id in activity_mapping.keys() and activity_from_id == "acquisition":
-            activity_obj = Acquisition(row["responsible institute"], row["responsible person"], row["tool"], row["start date"], row["end date"], row["refers_to"], row["technique"])
+            activity_obj = Acquisition(row["responsible institute"], row["responsible person"], row["tool"], row["start date"], row["end date"], get_CHO(obj_id), row["technique"])
             activity_list.append(activity_obj)
         elif activity_from_id in activity_mapping.keys() and activity_from_id != "acquisition":
             class_to_use = activity_mapping.get(activity_from_id)
-            activity_obj = class_to_use(row["responsible institute"], row["responsible person"], row["tool"], row["start date"], row["end date"], row["refers_to"])
+            activity_obj = class_to_use(row["responsible institute"], row["responsible person"], row["tool"], row["start date"], row["end date"], get_CHO(obj_id))
             activity_list.append(activity_obj)
 
     return activity_list
@@ -1251,8 +1280,7 @@ def instantiate_class(activity_df):
 def join_tools(activity_df): 
     # ensure the tool column in the df has dtype object
     activity_df["tool"] = activity_df["tool"].astype("object")
-    #print(activity_df["tool"].apply(type).unique())
-    # create a sub dataframe with just the unique id and tool column
+    # create a sub dataframe
     tools_subdf = activity_df[["unique_id", "tool"]]
     # iterate over sub dataframe grouping by unique id
     for unique_id, group in tools_subdf.groupby(["unique_id"]):
@@ -1376,8 +1404,8 @@ class AdvancedMashup(BasicMashup):
 
         SELECT ?object ?author ?name
         WHERE {
-            ?author dcterms:creator ?object .
-            ?author foaf:name ?name .
+            ?object dcterms:identifier ?id .
+            OPTIONAL { ?author dcterms:creator ?object . ?author foaf:name ?name . }
         }
         """
 
@@ -1390,7 +1418,8 @@ class AdvancedMashup(BasicMashup):
        
         for idx, row in authors_cho_df.iterrows(): # http://example.org/1
             if row["object"]:
-                slug = row["object"].split("/")[-1]
+                split_object = row["object"].split("/")
+                slug = split_object[-1]
                 objects_id.append("object_" + slug)
             else:
                 print(f"Warning: No object associated to {authors_cho_df['author'].iloc[idx]}")
@@ -1408,15 +1437,17 @@ class AdvancedMashup(BasicMashup):
         print("Merged dataframe\n:", merged)
 
         # check for matching values in the merged df and exclude nan values
-        merged[['start date', 'end date']] = merged[['start date', 'end date']].replace("", pd.NA)
-        merged = merged.dropna(subset=["start date", "end date"]) # non considera le stringhe vuote
-        result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
+        for _, row in merged.iterrows():
+            if pd.notna(row["start date"]) and pd.notna(row["end date"]):
+                result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
 
         # extend the empty list with the objects of the class person compliant with the query
         for _, row in result_df.iterrows():
-            author_uri = row["author"]
-            name = row["name"]
-            author_id = author_uri.split("/")[-1].replace("_", ":")
-            query_result.append(Person(author_id, name))
+            if pd.notna(row["author"]):
+                author_uri = row["author"]
+                name = row["name"]
+                split_author_uri = author_uri.split("/")
+                author_id = split_author_uri[-1].replace("_", ":")
+                query_result.append(Person(author_id, name))
         
         return query_result
