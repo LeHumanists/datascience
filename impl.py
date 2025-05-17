@@ -1,4 +1,3 @@
-import ast
 import pandas as pd
 import json
 import pprint
@@ -437,7 +436,13 @@ class ProcessDataUploadHandler(UploadHandler):
             tools_dict = dict()
             for idx, row in multi_valued_df.iterrows():
                 # populate dictionary with unique identifiers as keys and lists of tools as values
-                tools_dict[row.iloc[0]] = ast.literal_eval(row.iloc[1]) if isinstance(row.iloc[1], str) else row.iloc[1]
+                if isinstance(row["tool"], str):
+                    tool_str = row["tool"].replace("[", "").replace("]", "").replace("'", "")
+                    tool_str_to_list = tool_str.split(",")
+                    #print("tool_string_to_list has type:", type(tool_str_to_list))
+                    tools_dict[row["unique_id"]] = tool_str_to_list
+                else:
+                    row["tool"]
 
             #print(tools_dict)
 
@@ -446,7 +451,7 @@ class ProcessDataUploadHandler(UploadHandler):
 
             # iterate over each tool in the inner lists
             for tool_list in tools_dict.values():
-                # and append it to the pandas series
+                # and append it to the new list
                 if len(tool_list) < 1:
                     tools_unpacked.append("")
                 else:
