@@ -215,17 +215,10 @@ class MetadataUploadHandler(UploadHandler):
             }
 
     def pushDataToDb(self, file_path: str) -> bool:
-        if not os.path.exists(file_path):
-            print(f"Error: File not found at {file_path}")
-            return False
-
         try:
             # Load the CSV file into a DataFrame
             df = pd.read_csv(file_path)
 
-            if df.empty:
-                print("Error: The CSV file is empty or improperly formatted.")
-                return False
 
             # Process each row into RDF triples
             for _, row in df.iterrows():
@@ -991,45 +984,32 @@ class BasicMashup(object):
 
         return cultural_heritage_objects
     
-    def getAuthorsOfCulturalHeritageObject(self, id: str):  # A L I C E
-        # Check if there are any available handlers
+    def getAuthorsOfCulturalHeritageObject(self, id: str): # A L I C E
         if not self.metadataQuery:
-            return [] 
-    
-        # List to store valid DataFrames retrieved from each handler
+            return []
+
         df_list = []
-    
-        # Iterate through the handlers to collect author data
         for handler in self.metadataQuery:
-            # Retrieve the authors' data for the given object ID from the handler
             df = handler.getAuthorsOfCulturalHeritageObject(id)
-        
-            # If the DataFrame is not empty, add it to the list
-            if df is not None and not df.empty:  # Check for None as well
+            if df is not None and not df.empty:
                 df_list.append(df)
-    
-        # If there are no valid DataFrames, return an empty list
+
         if not df_list:
             return []
-    
-        # Concatenate the DataFrames, remove duplicates, and handle NaN values
-        df_union = pd.concat(df_list, ignore_index=True).drop_duplicates(subset=["authorId"]).fillna("")
-    
-        # List of authors (avoid empty or invalid authors)
+
+        df_union = pd.concat(df_list, ignore_index=True).drop_duplicates(subset=["personID"]).fillna("")
+
         author_result_list = []
         for _, row in df_union.iterrows():
-            # Strip leading and trailing whitespace from the author's name
-            author = row['authorName'].strip()
-            # If the author name is empty, return None
-            if author == "":
-                return None
+            person_id = str(row["personID"]).strip()
+            person_name = str(row["personName"]).strip()
+
+            if re.match(r'(VIAF|ULAN)_\d+', person_id):
+                identifier = person_id.replace("_", ":")
+                author_result_list.append(Author(person_name, identifier=identifier))
             else:
-                # Create a Person object for the author using their ID and name
-                person = Person(id=str(row["authorId"]), name=author)
-                # Append the Person object to the result list
-                author_result_list.append(person)
-            
-        # Return the list of author objects
+                author_result_list.append(Person(person_name))
+
         return author_result_list
 
     def getCulturalHeritageObjectsAuthoredBy(self, authorId: str) -> List[CulturalHeritageObject]:  # A L I C E
