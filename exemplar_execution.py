@@ -52,7 +52,7 @@ process_qh = ProcessDataQueryHandler()
 process_qh.setDbPathOrUrl(rel_path)
 
 metadata_qh = MetadataQueryHandler()
-metadata_qh.setDbPathOrUrl(grp_endpoint)
+metadata_qh.setDbPathOrUrl("http://192.168.1.105:9999/blazegraph/sparql")
 
 # Finally, create a advanced mashup object for asking
 # about data

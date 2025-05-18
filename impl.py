@@ -159,7 +159,7 @@ class Acquisition(Activity):
     
     def getTechnique(self):
         return self.technique
-    
+
 class Processing(Activity):
     pass
 
@@ -532,97 +532,45 @@ class MetadataQueryHandler(QueryHandler):
     def __init__(self):
         super().__init__()
 
-    # C A R L A
-    def getById(self, id: str) -> pd.DataFrame:
-        object_query = f"""
-        PREFIX schema: <https://schema.org/>
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-
-        SELECT DISTINCT ?id ?type ?title ?dateCreated ?maker ?spatial
-        WHERE {{
-            <http://example.org/{id}> dcterms:identifier ?id .
-            <http://example.org/{id}> rdf:type ?type .
-            OPTIONAL {{ <http://example.org/{id}> dcterms:title ?title . }}
-            OPTIONAL {{ <http://example.org/{id}> schema:dateCreated ?dateCreated . }}
-            OPTIONAL {{ <http://example.org/{id}> foaf:maker ?maker . }}
-            OPTIONAL {{ <http://example.org/{id}> dcterms:spatial ?spatial . }}
-        }}
-        """
-
-        # Execute the query and return the DataFrame
-        object_df = self.execute_query(object_query)
-        if not object_df.empty:
-            return object_df
-
-        print(f"No data found for ID: {id}")
-        return pd.DataFrame(columns=["id", "type", "title", "dateCreated", "maker", "spatial"])
-    
     def execute_query(self, query: str) -> pd.DataFrame:
-        """
-        Execute a SPARQL query and return the result as a DataFrame.
-        """
         if not self.dbPathOrUrl:
-            print("ERROR: SPARQL endpoint URL is not set. Use setDbPathOrUrl to configure it.")
             return pd.DataFrame()
-
-        print(f"Executing query on endpoint: {self.dbPathOrUrl}")
-        print(f"Query being sent:\n{query}")
 
         try:
             sparql = SPARQLWrapper(self.dbPathOrUrl)
             sparql.setQuery(query)
             sparql.setReturnFormat(JSON)
 
-            print("Sending query...")
             results = sparql.query().convert()
-            print("Query executed successfully!")
-
-            # Extract data into a DataFrame
             columns = results["head"]["vars"]
-            print(f"Columns in the result: {columns}")
             rows = [
                 [binding.get(col, {}).get("value", None) for col in columns]
                 for binding in results["results"]["bindings"]
             ]
-            print(f"Rows retrieved: {rows}")
-
             return pd.DataFrame(rows, columns=columns)
 
-        except Exception as e:
-            print(f"ERROR: Failed to execute SPARQL query. Exception: {e}")
+        except:
             return pd.DataFrame()
-        
-    def getAllPeople(self) -> pd.DataFrame:
-        """
-        Fetch all people (authors) from the database.
-        """
-        query = """
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
+    def getAllPeople(self) -> pd.DataFrame: # C A R L A
+        query = """
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?personName ?personID
         WHERE {
-            ?object dcterms:creator ?person .
             ?person foaf:name ?personName .
+            FILTER(STRSTARTS(STR(?person), "http://example.org/person/"))
             BIND(STRAFTER(STR(?person), "http://example.org/person/") AS ?personID)
         }
         ORDER BY ?personName
         """
         return self.execute_query(query)
 
-    # A L I C E
-    def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
-        """
-        Fetch all cultural heritage objects from the database.
-        """
+    def getAllCulturalHeritageObjects(self) -> pd.DataFrame: # C A R L A
         query = """
         PREFIX dcterms: <http://purl.org/dc/terms/>
         PREFIX schema: <https://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-
         SELECT DISTINCT ?id ?type ?title ?date ?owner ?place
         WHERE {
             ?object rdf:type ?type ;
@@ -631,36 +579,18 @@ class MetadataQueryHandler(QueryHandler):
             OPTIONAL { ?object schema:dateCreated ?date . }
             OPTIONAL { ?object foaf:maker ?owner . }
             OPTIONAL { ?object dcterms:spatial ?place . }
-            FILTER(?type IN (
-                <https://dbpedia.org/resource/Nautical_chart>,
-                <http://example.org/ManuscriptPlate>,
-                <https://dbpedia.org/resource/Category:Manuscripts_by_collection>,
-                <https://schema.org/PublicationVolume>,
-                <http://example.org/PrintedMaterial>,
-                <https://dbpedia.org/resource/Herbarium>,
-                <https://dbpedia.org/resource/Specimen>,
-                <https://dbpedia.org/resource/Category:Painting>,
-                <https://dbpedia.org/resource/Category:Prototypes>,
-                <https://dbpedia.org/resource/Category:Maps>
-            ))
         }
         ORDER BY ?title
         """
         return self.execute_query(query)
 
-    def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame:
-        """
-        Retrieve all authors of a specific cultural heritage object by its ID.
-        Returns a DataFrame.
-        """
+    def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame: # A L I C E
         query = f"""
         PREFIX dcterms: <http://purl.org/dc/terms/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-
         SELECT DISTINCT ?personName ?personID
         WHERE {{
-            ?object dcterms:identifier "{object_id}" .
-            ?object dcterms:creator ?person .
+            ?person dcterms:creator <http://example.org/{object_id}> .
             ?person foaf:name ?personName .
             BIND(STRAFTER(STR(?person), "http://example.org/person/") AS ?personID)
         }}
@@ -668,27 +598,23 @@ class MetadataQueryHandler(QueryHandler):
         """
         return self.execute_query(query)
 
-    def getCulturalHeritageObjectsAuthoredBy(self, id_value: str) -> pd.DataFrame:
-        """
-        Retrieve all cultural heritage objects authored by a specific person by their ID.
-        Returns a DataFrame.
-        """
+    def getCulturalHeritageObjectsAuthoredBy(self, id_value: str) -> pd.DataFrame: # A L I C E
         query = f"""
         PREFIX dcterms: <http://purl.org/dc/terms/>
         PREFIX schema: <https://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?objectID ?title ?date ?owner ?place
         WHERE {{
-            ?object dcterms:creator <http://example.org/person/{id_value}> ;
-                    dcterms:identifier ?objectID ;
-                    dcterms:title ?title ;
-                    schema:dateCreated ?date ;
-                    foaf:maker ?owner ;
-                    dcterms:spatial ?place .
+            <http://example.org/person/{id_value}> dcterms:creator ?object .
+            ?object dcterms:identifier ?objectID ;
+                    dcterms:title ?title .
+            OPTIONAL {{ ?object schema:dateCreated ?date . }}
+            OPTIONAL {{ ?object foaf:maker ?owner . }}
+            OPTIONAL {{ ?object dcterms:spatial ?place . }}
         }}
         ORDER BY ?title
         """
-        return self.execute_query(query)
+        return self.execute_query(query) 
     
 # F R A N C E S C A,  M A T I L D E        
 acquisition_sql_df = DataFrame()
@@ -1289,27 +1215,22 @@ def join_tools(activity_df):
     tools_subdf = activity_df[["unique_id", "tool"]]
     # iterate over sub dataframe grouping by unique id
     for unique_id, group in tools_subdf.groupby(["unique_id"]):
-        """ print("unique id var:", unique_id)
-        print(f"Current unique id is {unique_id} and current group is {group}") """
+        #print(f"Current unique id is {unique_id} and current group is {group}")
         # convert tools to list and then join them
-        concatenated_tools = ", ".join(group["tool"])
-        """ print("Concatenated tools:\n", concatenated_tools)
-        print(f"Concatenated tools for {unique_id}:", concatenated_tools) """
+        concatenated_tools = ", ".join(group["tool"].to_list())
+        #print(f"Concatenated tools for {unique_id}:", concatenated_tools)
         # update the row that matches the unique_id in the tuple with the content of the concatenated tools variable
         activity_df.loc[activity_df["unique_id"] == unique_id[0], "tool"] = concatenated_tools
-        #print("activity df after updating row", activity_df)
-
+    
     # convert the strings in the column to lists and assign the resul to a new variable
-    #print("Activity df before replacing tool col:\n", activity_df)
     new_tool_col = activity_df["tool"].str.split(", ")
     # reassign the tool column
     activity_df["tool"] = new_tool_col
-    #print("Activity df with new tool col:\n", activity_df)
     # drop identical rows
     activity_df_updated = activity_df.drop_duplicates(subset=['unique_id'])
 
     # check 
-    #print("updated dataframe:", activity_df_updated)
+    #print("updated dataframe:", activity_df_updated.query("unique_id == 'optimising_27'"))
     return activity_df_updated
 
 class AdvancedMashup(BasicMashup):
@@ -1448,7 +1369,6 @@ class AdvancedMashup(BasicMashup):
         print("Merged dataframe\n:", merged)
 
         # check for matching values in the merged df and exclude nan values
-        result_df = pd.DataFrame()
         for _, row in merged.iterrows():
             if pd.notna(row["start date"]) and pd.notna(row["end date"]):
                 result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
