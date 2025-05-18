@@ -531,6 +531,44 @@ class QueryHandler(Handler):
 class MetadataQueryHandler(QueryHandler):
     def __init__(self):
         super().__init__()
+    
+    def getById(self, id: str) -> pd.DataFrame:
+        # Query for cultural heritage object
+        object_query = f"""
+        PREFIX schema: <https://schema.org/>
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+        SELECT DISTINCT ?id ?type ?title ?dateCreated ?maker ?spatial
+        WHERE {{
+            ?s dcterms:identifier "{id}" ;
+            rdf:type ?type .
+            OPTIONAL {{ ?s dcterms:title ?title . }}
+            OPTIONAL {{ ?s schema:dateCreated ?dateCreated . }}
+            OPTIONAL {{ ?s foaf:maker ?maker . }}
+            OPTIONAL {{ ?s dcterms:spatial ?spatial . }}
+            BIND("{id}" AS ?id)
+        }}
+        LIMIT 1
+        """
+        df = self.execute_query(object_query)
+        if not df.empty:
+            return df
+
+        # Query for person
+        person_query = f"""
+        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
+        SELECT DISTINCT ?name ?id
+        WHERE {{
+            ?s foaf:name ?name .
+            FILTER(STR(?s) = "http://example.org/person/{id}")
+            BIND("{id}" AS ?id)
+        }}
+        LIMIT 1
+        """
+        return self.execute_query(person_query)
 
     def execute_query(self, query: str) -> pd.DataFrame:
         if not self.dbPathOrUrl:
