@@ -1235,7 +1235,7 @@ def join_tools(activity_df):
     for unique_id, group in tools_subdf.groupby(["unique_id"]):
         #print(f"Current unique id is {unique_id} and current group is {group}")
         # convert tools to list and then join them
-        concatenated_tools = ", ".join(group["tool"].to_list())
+        concatenated_tools = ", ".join(group["tool"])
         #print(f"Concatenated tools for {unique_id}:", concatenated_tools)
         # update the row that matches the unique_id in the tuple with the content of the concatenated tools variable
         activity_df.loc[activity_df["unique_id"] == unique_id[0], "tool"] = concatenated_tools
@@ -1248,7 +1248,7 @@ def join_tools(activity_df):
     activity_df_updated = activity_df.drop_duplicates(subset=['unique_id'])
 
     # check 
-    #print("updated dataframe:", activity_df_updated.query("unique_id == 'optimising_27'"))
+    #print("updated dataframe:", activity_df_updated)
     return activity_df_updated
 
 class AdvancedMashup(BasicMashup):
@@ -1386,7 +1386,7 @@ class AdvancedMashup(BasicMashup):
         merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
         print("Merged dataframe\n:", merged)
         
-        result_df = pd.DataFrame()  # define result_df para evitar UnboundLocalError
+        result_df = pd.DataFrame() 
 
         # check for matching values in the merged df and exclude nan values
         for _, row in merged.iterrows():
