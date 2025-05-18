@@ -159,7 +159,7 @@ class Acquisition(Activity):
     
     def getTechnique(self):
         return self.technique
-
+    
 class Processing(Activity):
     pass
 
@@ -1289,22 +1289,27 @@ def join_tools(activity_df):
     tools_subdf = activity_df[["unique_id", "tool"]]
     # iterate over sub dataframe grouping by unique id
     for unique_id, group in tools_subdf.groupby(["unique_id"]):
-        #print(f"Current unique id is {unique_id} and current group is {group}")
+        """ print("unique id var:", unique_id)
+        print(f"Current unique id is {unique_id} and current group is {group}") """
         # convert tools to list and then join them
-        concatenated_tools = ", ".join(group["tool"].to_list())
-        #print(f"Concatenated tools for {unique_id}:", concatenated_tools)
+        concatenated_tools = ", ".join(group["tool"])
+        """ print("Concatenated tools:\n", concatenated_tools)
+        print(f"Concatenated tools for {unique_id}:", concatenated_tools) """
         # update the row that matches the unique_id in the tuple with the content of the concatenated tools variable
         activity_df.loc[activity_df["unique_id"] == unique_id[0], "tool"] = concatenated_tools
-    
+        #print("activity df after updating row", activity_df)
+
     # convert the strings in the column to lists and assign the resul to a new variable
+    #print("Activity df before replacing tool col:\n", activity_df)
     new_tool_col = activity_df["tool"].str.split(", ")
     # reassign the tool column
     activity_df["tool"] = new_tool_col
+    #print("Activity df with new tool col:\n", activity_df)
     # drop identical rows
     activity_df_updated = activity_df.drop_duplicates(subset=['unique_id'])
 
     # check 
-    #print("updated dataframe:", activity_df_updated.query("unique_id == 'optimising_27'"))
+    #print("updated dataframe:", activity_df_updated)
     return activity_df_updated
 
 class AdvancedMashup(BasicMashup):
@@ -1443,6 +1448,7 @@ class AdvancedMashup(BasicMashup):
         print("Merged dataframe\n:", merged)
 
         # check for matching values in the merged df and exclude nan values
+        result_df = pd.DataFrame()
         for _, row in merged.iterrows():
             if pd.notna(row["start date"]) and pd.notna(row["end date"]):
                 result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
