@@ -1367,6 +1367,8 @@ class AdvancedMashup(BasicMashup):
         # merge resulting dataframes
         merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
         print("Merged dataframe\n:", merged)
+        
+        result_df = pd.DataFrame()  # define result_df para evitar UnboundLocalError
 
         # check for matching values in the merged df and exclude nan values
         for _, row in merged.iterrows():
