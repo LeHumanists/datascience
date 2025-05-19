@@ -1196,9 +1196,9 @@ def get_CHO(id):
     }
 
     metadata_qh = MetadataQueryHandler()
-    metadata_qh.setDbPathOrUrl("http://192.168.1.105:9999/blazegraph/sparql")
+    metadata_qh.setDbPathOrUrl(metadata_qh.getDbPathOrUrl())
     cho_df = metadata_qh.getAllCulturalHeritageObjects()
-    print("The dataframe from getAllCulturalHeritageObjects:", cho_df)
+
     for idx, row in cho_df.iterrows():
         if row["id"] == id:
             class_to_use = cho_mapping.get(row["type"])
