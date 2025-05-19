@@ -890,7 +890,7 @@ class BasicMashup(object):
                     # If the authors DataFrame is not empty
                     if authors_df is not None and not authors_df.empty:
                         # Add the object ID and the combination of author name and ID
-                        authors_df["auth"] = authors_df["authorName"].astype(str) + "-" + authors_df["authorId"].astype(str)
+                        authors_df["auth"] = authors_df["personName"].astype(str) + "-" + authors_df["personId"].astype(str)
                         authors_df["id"] = str(object_id)
                         
                         # If there are multiple authors, join them with a semicolon
