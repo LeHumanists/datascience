@@ -180,8 +180,9 @@ class Handler(object):
         return self.dbPathOrUrl
 
     def setDbPathOrUrl(self, url):
+        print("DEBUG - setDbPathOrUrl called with:", url)
         self.dbPathOrUrl = url
-        return True  # Indicate success
+        return True
 
 
 class UploadHandler(Handler):
@@ -192,8 +193,9 @@ class UploadHandler(Handler):
     
 # C A R L A
 class MetadataUploadHandler(UploadHandler):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, dbPathOrUrl=""):
+        super().__init__(dbPathOrUrl)  
+
         self.my_graph = Graph()  # RDF graph instance
         self.example = Namespace("http://example.org/")
         self.schema = Namespace("http://schema.org/")
@@ -212,7 +214,7 @@ class MetadataUploadHandler(UploadHandler):
             "Painting": URIRef("https://dbpedia.org/resource/Category:Painting"),
             "Model": URIRef("https://dbpedia.org/resource/Category:Prototypes"),
             "Map": URIRef("https://dbpedia.org/resource/Category:Maps"),
-            }
+        }
 
     def pushDataToDb(self, file_path: str) -> bool:
         try:
@@ -522,13 +524,13 @@ class QueryHandler(Handler):
 
 # A L I C E, C A R L A
 class MetadataQueryHandler(QueryHandler):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, dbPathOrUrl=""):
+        super().__init__(dbPathOrUrl)
     
     def getById(self, id: str) -> pd.DataFrame:
         # Query for cultural heritage object
         object_query = f"""
-        PREFIX schema: <https://schema.org/>
+        PREFIX schema: <http://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         PREFIX dcterms: <http://purl.org/dc/terms/>
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -596,24 +598,52 @@ class MetadataQueryHandler(QueryHandler):
         """
         return self.execute_query(query)
 
-    def getAllCulturalHeritageObjects(self) -> pd.DataFrame: # C A R L A
+    def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
+        print("DEBUG - self.dbPathOrUrl:", self.dbPathOrUrl) 
+        if not self.dbPathOrUrl:
+            print("SPARQL endpoint URL is not set.")
+            return pd.DataFrame()
+
+        sparql = SPARQLWrapper(self.dbPathOrUrl)
+
         query = """
         PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX schema: <https://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        SELECT DISTINCT ?id ?type ?title ?date ?owner ?place
+        PREFIX schema: <http://schema.org/>
+
+        SELECT DISTINCT ?id ?type ?title ?dateCreated ?owner ?place
         WHERE {
             ?object rdf:type ?type ;
                     dcterms:identifier ?id ;
                     dcterms:title ?title .
-            OPTIONAL { ?object schema:dateCreated ?date . }
+            OPTIONAL { ?object schema:dateCreated ?dateCreated . }
             OPTIONAL { ?object foaf:maker ?owner . }
             OPTIONAL { ?object dcterms:spatial ?place . }
         }
         ORDER BY ?title
         """
-        return self.execute_query(query)
+
+        try:
+            sparql.setQuery(query)
+            sparql.setReturnFormat(JSON)
+
+            print("DEBUG - Executing SPARQL query...")
+            results = sparql.query().convert()
+
+            columns = results["head"]["vars"]
+            rows = [
+                [binding.get(col, {}).get("value", None) for col in columns]
+                for binding in results["results"]["bindings"]
+            ]
+
+            df = pd.DataFrame(rows, columns=columns)
+            print("Query returned", len(df), "rows.")
+            return df
+
+        except Exception as e:
+            print("Error executing SPARQL query:", e)
+            return pd.DataFrame()
 
     def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame: # A L I C E
         query = f"""
@@ -632,7 +662,7 @@ class MetadataQueryHandler(QueryHandler):
     def getCulturalHeritageObjectsAuthoredBy(self, id_value: str) -> pd.DataFrame: # A L I C E
         query = f"""
         PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX schema: <https://schema.org/>
+        PREFIX schema: <http://schema.org/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?objectID ?title ?date ?owner ?place
         WHERE {{
@@ -796,17 +826,17 @@ class BasicMashup(object):
         self.metadataQuery = []  
         self.processQuery = []
         self.type_mapping = {
-        "https://dbpedia.org/resource/Nautical_chart": NauticalChart,
-        "http://example.org/ManuscriptPlate": ManuscriptPlate,
-        "https://dbpedia.org/resource/Category:Manuscripts_by_collection": ManuscriptVolume,
-        "https://schema.org/PublicationVolume": PrintedVolume,
-        "http://example.org/PrintedMaterial": PrintedMaterial,
-        "https://dbpedia.org/resource/Herbarium": Herbarium,
-        "https://dbpedia.org/resource/Specimen": Specimen,
-        "https://dbpedia.org/resource/Category:Painting": Painting,
-        "https://dbpedia.org/resource/Category:Prototypes": Model,
-        "https://dbpedia.org/resource/Category:Maps": Map,
-    }
+    "https://dbpedia.org/resource/Nautical_chart": NauticalChart,
+    "http://example.org/ManuscriptPlate": ManuscriptPlate,
+    "https://dbpedia.org/resource/Category:Manuscripts_by_collection": ManuscriptVolume,
+    "https://schema.org/PublicationVolume": PrintedVolume,
+    "http://example.org/PrintedMaterial": PrintedMaterial,
+    "https://dbpedia.org/resource/Herbarium": Herbarium,
+    "https://dbpedia.org/resource/Specimen": Specimen,
+    "https://dbpedia.org/resource/Category:Painting": Painting,
+    "https://dbpedia.org/resource/Category:Prototypes": Model,
+    "https://dbpedia.org/resource/Category:Maps": Map,
+}
 
     def cleanMetadataHandlers(self):
         self.metadataQuery = [] 
@@ -825,21 +855,17 @@ class BasicMashup(object):
         return True
 
     def createEntityObject(self, entity_data: dict) -> CulturalHeritageObject:
-        # Retrieve the entity type from the data, which comes from the SPARQL query as a URI
-        entity_type = entity_data.get("type", None)
-        # Extract additional attributes from the data
-        entity_id = entity_data.get("id")
-        title = entity_data.get("title", "")
-        date = entity_data.get("dateCreated", "")
-        owner = entity_data.get("maker", "")
-        place = entity_data.get("spatial", "")
+        entity_type = entity_data.get("type", "").strip()
+        entity_id = str(entity_data.get("id", "")).strip()
+        title = str(entity_data.get("title", "")).strip()
+        date = str(entity_data.get("dateCreated", "")).strip()
+        owner = str(entity_data.get("owner", "")).strip()
+        place = str(entity_data.get("place", "")).strip()
 
-        # Check if the entity type is mapped to a specific class
         if entity_type in self.type_mapping:
-            cls = self.type_mapping[entity_type] # Get the corresponding class
-            return cls(entity_id, title, date, owner, place)  # Instantiate and return the class
+            cls = self.type_mapping[entity_type]
+            return cls(entity_id, title, date, owner, place)
         else:
-            # If the type is not mapped, return a generic CulturalHeritageObject
             return CulturalHeritageObject(entity_id, title, date, owner, place)
 
     def createObjectList(self, df: pd.DataFrame) -> List[IdentifiableEntity]: # C A R L A
@@ -930,19 +956,17 @@ class BasicMashup(object):
         return person_list
     
     
-    def getAllCulturalHeritageObjects(self):  # A L I C E
+    def getAllCulturalHeritageObjects(self): # C A R L A
         """
-        Returns a list of objects of the class CulturalHeritageObject (or its subclasses).
-        Integrates related person information into these objects.
+        Returns a list of objects of the class CulturalHeritageObject (or its subclasses),
+        constructed from the data retrieved by all metadata handlers.
         """
-        # Ensure metadataQuery handlers are available
         if not self.metadataQuery:
             return []
 
-        # List to collect DataFrames from handlers
         df_list = []
 
-        # Iterate over metadata handlers to retrieve DataFrames
+        # Gather data from all metadata handlers
         for handler in self.metadataQuery:
             try:
                 df_objects = handler.getAllCulturalHeritageObjects()
@@ -951,36 +975,18 @@ class BasicMashup(object):
             except Exception as e:
                 print(f"Error retrieving objects from handler {handler}: {e}")
 
-        # If no data was retrieved, return an empty list
         if not df_list:
             return []
 
-        # Merge all DataFrames, remove duplicates, and handle missing values
+        # Merge data, clean it
         df_union = pd.concat(df_list, ignore_index=True).drop_duplicates().fillna("")
 
-        # List to store the created objects
+        # Convert each row into a proper object using createEntityObject
         cultural_heritage_objects = []
-
-        # Iterate through each row of the DataFrame
         for _, row in df_union.iterrows():
-            obj_type = row['type']  # Get the object type
-
-            # Check if the type is mapped to a subclass
-            if obj_type in self.type_mapping:
-                # Retrieve the corresponding class
-                object_class = self.type_mapping[obj_type]
-
-                # Create an instance of the cultural heritage object
-                obj = object_class(
-                    id=str(row['id']),       # Object ID
-                    title=row['title'],      # Object title
-                    date=str(row['date']),   # Object date
-                    owner=row['owner'],      # Object owner
-                    place=row['place'],      # Object place
-                )
-                cultural_heritage_objects.append(obj)
-            else:
-                print(f"Warning: Object type {obj_type} not found in type mapping.")
+            entity_data = row.to_dict()
+            obj = self.createEntityObject(entity_data)
+            cultural_heritage_objects.append(obj)
 
         return cultural_heritage_objects
     
@@ -1192,7 +1198,7 @@ def get_CHO(id):
     cho_df = metadata_qh.getAllCulturalHeritageObjects()
     print("The dataframe from getAllCulturalHeritageObjects:", cho_df)
     for idx, row in cho_df.iterrows():
-        if row["Id"] == id:
+        if row["id"] == id:
             class_to_use = cho_mapping.get(row["type"])
             ch_object = class_to_use(row["id"], row["title"], row["date"], row["owner"], row["place"])
 
@@ -1253,7 +1259,7 @@ def join_tools(activity_df):
 
 class AdvancedMashup(BasicMashup):
     def __init__(self):
-        super().__init__()  # Inherit initialization from BasicMashup
+        super().__init__()
 
     def getActivitiesOnObjectsAuthoredBy(self, person_id: str) -> List[Activity]:
         if not self.metadataQuery or not self.processQuery:
