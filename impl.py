@@ -1196,7 +1196,7 @@ def get_CHO(id):
     }
 
     metadata_qh = MetadataQueryHandler()
-    metadata_qh.setDbPathOrUrl(metadata_qh.getDbPathOrUrl())
+    metadata_qh.setDbPathOrUrl("http://192.168.1.105:9999/blazegraph/sparql")
     cho_df = metadata_qh.getAllCulturalHeritageObjects()
     print("The dataframe from getAllCulturalHeritageObjects:", cho_df)
     for idx, row in cho_df.iterrows():
