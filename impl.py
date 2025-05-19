@@ -1368,7 +1368,7 @@ class AdvancedMashup(BasicMashup):
         """
 
         authors_cho_df = get(endpoint, sparql_query, True)
-        print("Authors and objects dataframe\n:", authors_cho_df)
+      
 
          # associate id to each object uri
         objects_id = []
@@ -1383,7 +1383,7 @@ class AdvancedMashup(BasicMashup):
                 print(f"Warning: No object associated to {authors_cho_df['author'].iloc[idx]}")
 
         authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
-        print("dataframe with ids\n:", authors_cho_df)
+        
         
         # sql query
         with connect("relational.db") as con:
@@ -1392,7 +1392,7 @@ class AdvancedMashup(BasicMashup):
         
         # merge resulting dataframes
         merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
-        print("Merged dataframe\n:", merged)
+
         
         result_df = pd.DataFrame() 
 
