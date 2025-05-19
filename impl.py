@@ -180,7 +180,6 @@ class Handler(object):
         return self.dbPathOrUrl
 
     def setDbPathOrUrl(self, url):
-        print("DEBUG - setDbPathOrUrl called with:", url)
         self.dbPathOrUrl = url
         return True
 
@@ -599,9 +598,7 @@ class MetadataQueryHandler(QueryHandler):
         return self.execute_query(query)
 
     def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
-        print("DEBUG - self.dbPathOrUrl:", self.dbPathOrUrl) 
         if not self.dbPathOrUrl:
-            print("SPARQL endpoint URL is not set.")
             return pd.DataFrame()
 
         sparql = SPARQLWrapper(self.dbPathOrUrl)
@@ -628,7 +625,6 @@ class MetadataQueryHandler(QueryHandler):
             sparql.setQuery(query)
             sparql.setReturnFormat(JSON)
 
-            print("DEBUG - Executing SPARQL query...")
             results = sparql.query().convert()
 
             columns = results["head"]["vars"]
