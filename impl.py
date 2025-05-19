@@ -1180,7 +1180,7 @@ class BasicMashup(object):
 
 
 ch_object = ""
-def get_CHO(id, metadata_qh):
+def get_CHO(id):
     global ch_object
     cho_mapping = {
         "https://dbpedia.org/resource/Nautical_chart": NauticalChart,
