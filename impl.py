@@ -1178,23 +1178,25 @@ class BasicMashup(object):
         #print(instantiate_class(updated_df))
         return instantiate_class(updated_df)
 
+
 ch_object = ""
-def get_CHO(id):
+def get_CHO(id, metadata_qh):
     global ch_object
     cho_mapping = {
-        "Nautical chart": NauticalChart,
-        "Manuscript plate": ManuscriptPlate,
-        "Manuscript volume": ManuscriptVolume,
-        "Printed volume": PrintedVolume,
-        "Printed material": PrintedMaterial,
-        "Herbarium": Herbarium,
-        "Specimen": Specimen,
-        "Painting": Painting,
-        "Model": Model,
-        "Map": Map
+        "https://dbpedia.org/resource/Nautical_chart": NauticalChart,
+        "http://example.org/ManuscriptPlate": ManuscriptPlate,
+        "https://dbpedia.org/resource/Category:Manuscripts_by_collection": ManuscriptVolume,
+        "https://schema.org/PublicationVolume": PrintedVolume,
+        "http://example.org/PrintedMaterial": PrintedMaterial,
+        "https://dbpedia.org/resource/Herbarium": Herbarium,
+        "https://dbpedia.org/resource/Specimen": Specimen,
+        "https://dbpedia.org/resource/Category:Painting": Painting,
+        "https://dbpedia.org/resource/Category:Prototypes": Model,
+        "https://dbpedia.org/resource/Category:Maps": Map,
     }
 
     metadata_qh = MetadataQueryHandler()
+    metadata_qh.setDbPathOrUrl(metadata_qh.getDbPathOrUrl())
     cho_df = metadata_qh.getAllCulturalHeritageObjects()
     print("The dataframe from getAllCulturalHeritageObjects:", cho_df)
     for idx, row in cho_df.iterrows():
@@ -1360,7 +1362,7 @@ class AdvancedMashup(BasicMashup):
         SELECT ?object ?author ?name
         WHERE {
             ?object dcterms:identifier ?id .
-            OPTIONAL { ?author dcterms:creator ?object . }
+            OPTIONAL { ?object dcterms:creator ?author . }
             OPTIONAL { ?author foaf:name ?name . }
         }
         """
