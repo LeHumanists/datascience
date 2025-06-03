@@ -322,7 +322,7 @@ class ProcessDataUploadHandler(UploadHandler):
     def pushDataToDb(self, file_path):
 
         # open json file
-        with open("data/process.json", "r", encoding="utf-8") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             json_data = load(f)
     
         # function for extracting data from json
