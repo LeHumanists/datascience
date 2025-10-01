@@ -29,12 +29,22 @@ class IdentifiableEntity(object):
     def getId(self):
         return self.id
 
-class Person(IdentifiableEntity):
+class Person(IdentifiableEntity): 
     def __init__(self, name):
         self.name = name
         
     def getName(self):
         return self.name
+
+# Person should inherit the id from its superclass (IdentifiableEntity)
+""" class Person(IdentifiableEntity):
+    def __init__(self, identifier, name):
+        self.name = name
+        
+        super().__init__(identifier) # inherit id from IdentifiableEntity
+
+    def getName(self):
+        return self.name """
 
 # A L I C E, C A R L A
 class Author(Person):
@@ -436,7 +446,7 @@ class ProcessDataUploadHandler(UploadHandler):
                     #print("tool_string_to_list has type:", type(tool_str_to_list))
                     tools_dict[row["unique_id"]] = tool_str_to_list
                 else:
-                    row["tool"]
+                    tools_dict[row["unique_id"]] = row["tool"]
 
             #print(tools_dict)
 
