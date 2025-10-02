@@ -199,7 +199,14 @@ class UploadHandler(Handler):
         super().__init__(dbPathOrUrl)
     def pushDataToDb(self, file_path):
         pass
-    
+
+# UploadHandler has no additional attributes
+""" class UploadHandler(Handler):
+    pass
+
+    def pushDataToDb(self, file_path):
+        pass """
+
 # C A R L A
 class MetadataUploadHandler(UploadHandler):
     def __init__(self, dbPathOrUrl=""):
@@ -531,6 +538,13 @@ class QueryHandler(Handler):
     def getById(self, id: str):
         pass 
 
+# QueryHandler has no additional attributes
+""" class QueryHandler(Handler):
+    pass
+        
+    def getById(self, id: str):
+        pass  """
+
 # A L I C E, C A R L A
 class MetadataQueryHandler(QueryHandler):
     def __init__(self, dbPathOrUrl=""):
@@ -712,7 +726,7 @@ def query_rel_db():
     return activities
 
 class ProcessDataQueryHandler(QueryHandler):
-    def __init__(self, dbPathOrUrl = ""):
+    def __init__(self, dbPathOrUrl = ""): #ProcessDataQH has no additional attributes: def __init__...etc can be replaced with pass
         super().__init__(dbPathOrUrl)
     
     def getById(self, id: str) -> pd.DataFrame:
