@@ -159,7 +159,7 @@ class Activity(object):
             return None
 
     def refersTo(self):
-        return CulturalHeritageObject
+        return self.refers_to
 
 class Acquisition(Activity):
     def __init__(self, institute, person, tools, start, end, refers_to, technique):
