@@ -535,7 +535,7 @@ class QueryHandler(Handler):
     def __init__(self, dbPathOrUrl: str = ""):
         super().__init__(dbPathOrUrl)
         
-    def getById(self, id: str):
+    def getById(self, id: str): # in the data model, getById is a method of QueryHandler, which is superclass of MetadataQueryHandler and ProcessDataQueryHandler, so it should be inherited by both. should we move it here?
         pass 
 
 # QueryHandler has no additional attributes
@@ -729,7 +729,7 @@ class ProcessDataQueryHandler(QueryHandler):
     def __init__(self, dbPathOrUrl = ""): #ProcessDataQH has no additional attributes: def __init__...etc can be replaced with pass
         super().__init__(dbPathOrUrl)
     
-    def getById(self, id: str) -> pd.DataFrame:
+    def getById(self, id: str) -> pd.DataFrame: # if we move getById to QueryHandler, this is automatically inherited from the superclass
         return pd.DataFrame()
 
     def getAllActivities(self):
@@ -1199,9 +1199,9 @@ class BasicMashup(object):
         return instantiate_class(updated_df)
 
 
-ch_object = ""
+""" ch_object = "" """
 def get_CHO(id):
-    global ch_object
+    """ global ch_object """
     cho_mapping = {
         "https://dbpedia.org/resource/Nautical_chart": NauticalChart,
         "http://example.org/ManuscriptPlate": ManuscriptPlate,
@@ -1222,9 +1222,9 @@ def get_CHO(id):
     for idx, row in cho_df.iterrows():
         if row["id"] == id:
             class_to_use = cho_mapping.get(row["type"])
-            ch_object = class_to_use(row["id"], row["title"], row["date"], row["owner"], row["place"])
+            return class_to_use(row["id"], row["title"], row["date"], row["owner"], row["place"])
 
-    return ch_object
+    return None # fallback if no match is found
     
 def instantiate_class(activity_df):
     activity_list = []
@@ -1360,8 +1360,6 @@ class AdvancedMashup(BasicMashup):
         return objects_list
 
     # M A T I L D E
-    authors_cho_df = pd.DataFrame()
-    acq_timeframe_df = pd.DataFrame()
     def getAuthorsOfObjectsAcquiredInTimeFrame(self, start, end): # returns a list of objects of the class person
         query_result = []
 
@@ -1404,22 +1402,19 @@ class AdvancedMashup(BasicMashup):
 
         authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
         
+        # acquisition df
+        acq_df_list = []
+        for handler in self.processQuery:
+            df_sa = handler.getActivitiesStartedAfter(start)
+            df_eb = handler.getActivitiesEndedBefore(end)
+            acq_df_list.extend([df_sa, df_eb])
         
-        # sql query
-        with connect("relational.db") as con:
-            sql_query = "SELECT `start date`, `end date`, `refers_to` FROM Acquisition" 
-            acq_timeframe_df = read_sql(sql_query, con)
+        acq_timeframe_df = pd.concat(acq_df_list, ignore_index=True).drop_duplicates()
+        acq_timeframe_df = acq_timeframe_df[["unique_id", "start date", "end date", "refers_to"]]
+        print("Advanced: df for all activities:\n", acq_timeframe_df.head())
         
         # merge resulting dataframes
-        merged = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
-
-        
-        result_df = pd.DataFrame() 
-
-        # check for matching values in the merged df and exclude nan values
-        for _, row in merged.iterrows():
-            if pd.notna(row["start date"]) and pd.notna(row["end date"]):
-                result_df = merged[(merged["start date"] >= start) & (merged["end date"] <= end)]
+        result_df = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
 
         # extend the empty list with the objects of the class person compliant with the query
         for _, row in result_df.iterrows():
