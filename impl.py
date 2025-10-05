@@ -29,31 +29,21 @@ class IdentifiableEntity(object):
     def getId(self):
         return self.id
 
-class Person(IdentifiableEntity): 
-    def __init__(self, name):
+class Person(IdentifiableEntity):
+    def __init__(self, id: str, name: str):
+        super().__init__(str(id))
         self.name = name
-        
+
     def getName(self):
         return self.name
 
-# Person should inherit the id from its superclass (IdentifiableEntity)
-""" class Person(IdentifiableEntity):
-    def __init__(self, identifier, name):
-        self.name = name
-        
-        super().__init__(identifier) # inherit id from IdentifiableEntity
-
-    def getName(self):
-        return self.name """
-
-# A L I C E, C A R L A
-class Author(Person):
-    def __init__(self, name, identifier=None):
-        super().__init__(name)
-        self.identifier = identifier 
-        
+<<<<<<< Updated upstream
+=======
     def getIdentifier(self):
-        return self.identifier
+        return self.id
+
+>>>>>>> Stashed changes
+# A L I C E, C A R L A
 
 class CulturalHeritageObject(IdentifiableEntity):
     def __init__(self, id:str, title:str, date:str, owner:str, place:str):
@@ -77,15 +67,13 @@ class CulturalHeritageObject(IdentifiableEntity):
         return self.place
     
     def addAuthor(self, author):
-        if isinstance(author, Author): 
+        if isinstance(author, Person): 
             self.authors.append(author)
     
     def removeAuthor(self, author):
         if author in self.authors:
             self.authors.remove(author)
 
-    def getAuthors(self):
-        return [author.getName() for author in self.authors]
 
 
 class NauticalChart(CulturalHeritageObject):
@@ -284,24 +272,49 @@ class MetadataUploadHandler(UploadHandler):
 
             # Process the authors in the line
             if "Author" in row and pd.notna(row["Author"]):
-                # Split authors by semicolon (;) instead of comma (,)
                 authors = row["Author"].split(";") if isinstance(row["Author"], str) else []
-                
+
                 for author_string in authors:
                     author_string = author_string.strip()
 
-                    author_id_match = re.search(r'\(([\w\-]+):([\w\-]+)\)', author_string)
-                    if author_id_match:
-                        id_type = author_id_match.group(1)
-                        id_value = author_id_match.group(2)
-                        person_id = URIRef(f"http://example.org/person/{id_type}_{id_value}")
+<<<<<<< Updated upstream
+                    # Extract identifier, e.g. (VIAF:123456)
+=======
+                    # Extrai o identificador (ex: VIAF:123456)
+>>>>>>> Stashed changes
+                    match = re.search(r"\(([\w\-]+):([\w\-]+)\)", author_string)
+                    if match:
+                        id_type, id_value = match.group(1), match.group(2)
+                        identifier = f"{id_type}:{id_value}"
+                        name = author_string.split("(")[0].strip()
                     else:
-                        person_id = URIRef(f"http://example.org/person/{author_string.replace(' ', '_')}")
+                        identifier = author_string.replace(" ", "_")
+                        name = author_string
 
-                    self.my_graph.add((person_id, DCTERMS.creator, subj))
-                    self.my_graph.add((person_id, FOAF.name, Literal(author_string)))
-                    print(f"Added author: {author_string}, ID: {person_id}")
+<<<<<<< Updated upstream
+                    # Create Person instance
+                    person = Person(identifier, name)
+=======
+                    # Cria instância de Person
+                    person = Person(identifier, name)
 
+                    # URI para a pessoa
+                    person_uri = URIRef(f"http://example.org/person/{person.getIdentifier().replace(':', '_')}")
+
+                    # Relação objeto → autor
+                    self.my_graph.add((subj, DCTERMS.creator, person_uri))
+                    self.my_graph.add((person_uri, FOAF.name, Literal(person.getName())))
+                    print(f"Added author: {person.getName()} (ID: {person.getIdentifier()})")
+>>>>>>> Stashed changes
+
+                    # Create URI for the person, replacing ":" with "_" for a valid URI
+                    person_uri = URIRef(f"http://example.org/person/{person.getId().replace(':', '_')}")
+
+                    # Add triples to the graph
+                    self.my_graph.add((subj, DCTERMS.creator, person_uri))  # object → author
+                    self.my_graph.add((person_uri, FOAF.name, Literal(person.getName())))
+                    print(f"Added author: {person.getName()} (ID: {person.getId()})")
+        
         except Exception as e:
             print(f"Error processing row: {row}. Exception: {e}")
         
@@ -621,7 +634,7 @@ class MetadataQueryHandler(QueryHandler):
         """
         return self.execute_query(query)
 
-    def getAllCulturalHeritageObjects(self) -> pd.DataFrame:
+    def getAllCulturalHeritageObjects(self) -> pd.DataFrame: # C A R L A
         if not self.dbPathOrUrl:
             return pd.DataFrame()
 
@@ -889,11 +902,11 @@ class BasicMashup(object):
             return CulturalHeritageObject(entity_id, title, date, owner, place)
 
     def createObjectList(self, df: pd.DataFrame) -> List[IdentifiableEntity]: # C A R L A
-        object_list = []  # Initialize an empty list for storing objects
-        for _, row in df.iterrows():  # Iterate over rows in the DataFrame
-            entity_data = row.to_dict()  # Convert each row to a dictionary
-            obj = self.createEntityObject(entity_data)  # Create an object using createEntityObject
-            object_list.append(obj)  # Append the created object to the list
+        object_list = []  
+        for _, row in df.iterrows():  
+            entity_data = row.to_dict()  
+            obj = self.createEntityObject(entity_data)  
+            object_list.append(obj) 
         return object_list
     
     def combineAuthorsOfObjects(self, df, handler):  # A L I C E
@@ -928,13 +941,13 @@ class BasicMashup(object):
         return df.drop_duplicates()
 
     def getEntityById(self, entity_id: str) -> Optional[IdentifiableEntity]:  # C A R L A
-            if not self.metadataQuery:  # Return None if no metadata handlers are available
+            if not self.metadataQuery: 
                 return None
-            for handler in self.metadataQuery:  # Iterate over metadata handlers to query by ID
+            for handler in self.metadataQuery:  
                 try:
-                    df = handler.getById(entity_id)  # Query data using the handler and retrieve as a DataFrame
+                    df = handler.getById(entity_id)  
                     if not df.empty:  # Check if the DataFrame is not empty
-                        if 'type' in df.columns:  # Check for Cultural Heritage Objects based on 'type'
+                        if 'type' in df.columns:  
                             cho_list = self.createObjectList(df)
                             if cho_list:
                                 return cho_list[0]  # Return the first matching object
@@ -968,7 +981,7 @@ class BasicMashup(object):
 
                         # Determine if the person is an Author with VIAF or ULAN ID
                         if re.match(r'(VIAF|ULAN)_\d+', person_id):
-                            person_list.append(Author(person_name, identifier=person_id))
+                            person_list.append(Person(person_name, identifier=person_id))
                         else:
                             person_list.append(Person(person_name))
 
@@ -1032,7 +1045,7 @@ class BasicMashup(object):
 
             if re.match(r'(VIAF|ULAN)_\d+', person_id):
                 identifier = person_id.replace("_", ":")
-                author_result_list.append(Author(person_name, identifier=identifier))
+                author_result_list.append(Person(person_name, identifier=identifier))
             else:
                 author_result_list.append(Person(person_name))
 
@@ -1283,7 +1296,7 @@ class AdvancedMashup(BasicMashup):
     def __init__(self):
         super().__init__()
 
-    def getActivitiesOnObjectsAuthoredBy(self, person_id: str) -> List[Activity]:
+    def getActivitiesOnObjectsAuthoredBy(self, person_id: str) -> List[Activity]: # C A R L A
         if not self.metadataQuery or not self.processQuery:
             return []
 
