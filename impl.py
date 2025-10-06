@@ -37,12 +37,6 @@ class Person(IdentifiableEntity):
     def getName(self):
         return self.name
 
-<<<<<<< Updated upstream
-=======
-    def getIdentifier(self):
-        return self.id
-
->>>>>>> Stashed changes
 # A L I C E, C A R L A
 
 class CulturalHeritageObject(IdentifiableEntity):
@@ -277,11 +271,7 @@ class MetadataUploadHandler(UploadHandler):
                 for author_string in authors:
                     author_string = author_string.strip()
 
-<<<<<<< Updated upstream
                     # Extract identifier, e.g. (VIAF:123456)
-=======
-                    # Extrai o identificador (ex: VIAF:123456)
->>>>>>> Stashed changes
                     match = re.search(r"\(([\w\-]+):([\w\-]+)\)", author_string)
                     if match:
                         id_type, id_value = match.group(1), match.group(2)
@@ -291,21 +281,8 @@ class MetadataUploadHandler(UploadHandler):
                         identifier = author_string.replace(" ", "_")
                         name = author_string
 
-<<<<<<< Updated upstream
                     # Create Person instance
                     person = Person(identifier, name)
-=======
-                    # Cria instância de Person
-                    person = Person(identifier, name)
-
-                    # URI para a pessoa
-                    person_uri = URIRef(f"http://example.org/person/{person.getIdentifier().replace(':', '_')}")
-
-                    # Relação objeto → autor
-                    self.my_graph.add((subj, DCTERMS.creator, person_uri))
-                    self.my_graph.add((person_uri, FOAF.name, Literal(person.getName())))
-                    print(f"Added author: {person.getName()} (ID: {person.getIdentifier()})")
->>>>>>> Stashed changes
 
                     # Create URI for the person, replacing ":" with "_" for a valid URI
                     person_uri = URIRef(f"http://example.org/person/{person.getId().replace(':', '_')}")
