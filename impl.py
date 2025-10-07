@@ -661,13 +661,22 @@ class MetadataQueryHandler(QueryHandler):
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?personName ?personID
         WHERE {{
-            ?person dcterms:creator <http://example.org/{object_id}> .
-            ?person foaf:name ?personName .
+            <http://example.org/{object_id}> dcterms:creator ?person .
+            OPTIONAL {{ ?person foaf:name ?personName . }}
             BIND(STRAFTER(STR(?person), "http://example.org/person/") AS ?personID)
         }}
         ORDER BY ?personName
         """
-        return self.execute_query(query)
+        df = self.execute_query(query)
+
+        # Se mancano colonne o valori None, li puliamo
+        if not df.empty:
+            if "personName" not in df.columns:
+                df["personName"] = ""
+            df["personName"] = df["personName"].fillna("")  # sostituisce None con stringa vuota
+            df["personID"] = df["personID"].fillna("")      # per sicurezza, anche per ID
+
+        return df
 
     def getCulturalHeritageObjectsAuthoredBy(self, id_value: str) -> pd.DataFrame: # A L I C E
         query = f"""
@@ -676,7 +685,7 @@ class MetadataQueryHandler(QueryHandler):
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT DISTINCT ?objectID ?title ?date ?owner ?place
         WHERE {{
-            <http://example.org/person/{id_value}> dcterms:creator ?object .
+            ?object dcterms:creator <http://example.org/person/{id_value}> .
             ?object dcterms:identifier ?objectID ;
                     dcterms:title ?title .
             OPTIONAL {{ ?object schema:dateCreated ?date . }}
@@ -685,7 +694,7 @@ class MetadataQueryHandler(QueryHandler):
         }}
         ORDER BY ?title
         """
-        return self.execute_query(query) 
+        return self.execute_query(query)
     
 # F R A N C E S C A,  M A T I L D E        
 acquisition_sql_df = DataFrame()
