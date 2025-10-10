@@ -1295,40 +1295,42 @@ class AdvancedMashup(BasicMashup):
 
         return [act for act in all_activities if act.refers_to in authored_ids]
         
-    def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:  # A L I C E
-        """Retrieve cultural heritage objects involved in activities handled by a specific person."""
-        objects_list = []
+    def getObjectsHandledByResponsiblePerson(self, partialName: str) -> list[CulturalHeritageObject]:
+        """
+        Restituisce tutti gli oggetti culturali coinvolti in attività
+        gestite da una persona il cui nome corrisponde (anche parzialmente)
+        alla stringa in input.
+        """
+        results = []
 
-        # Validate input
-        if not partialName or not self.processQuery or not self.metadataQuery:
-            return objects_list
-
-        # Retrieve activities by responsible person
+        # Trova le attività gestite da quella persona
         activities = self.getActivitiesByResponsiblePerson(partialName)
+        if activities.empty:
+            return results
 
-        # Retrieve all cultural heritage objects
+        # Ottieni tutti gli oggetti culturali
         all_objects = self.getAllCulturalHeritageObjects()
+        if not all_objects:
+            return results
 
-        # Initialize an empty set to store unique object IDs
-        object_ids = set()
-
-        # Helper function to check if the referred object is valid
+        # Itera sulle attività e raccogli gli oggetti validi
         def is_valid_referred_object(activity):
             refersTo_cho = getattr(activity, "refersTo_cho", None)
-            return refersTo_cho and hasattr(refersTo_cho, "id")
+            return refersTo_cho is not None and hasattr(refersTo_cho, "id")
 
-        # Iterate through activities and gather valid object IDs
+        object_ids = set()
         for activity in activities:
             if is_valid_referred_object(activity):
                 refersTo_cho = getattr(activity, "refersTo_cho")
                 object_ids.add(refersTo_cho.id)
 
-        # Match objects to activities
+        # Seleziona gli oggetti culturali che corrispondono agli ID raccolti
         for cho in all_objects:
             if cho.id in object_ids:
-                objects_list.append(cho)
+                results.append(cho)
 
-        return objects_list
+        return results
+
 
     def getObjectsHandledByResponsibleInstitution(self, institution: str) -> list[CulturalHeritageObject]:
         """Retrieve cultural heritage objects involved in activities handled by a specific institution."""
