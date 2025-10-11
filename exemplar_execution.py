@@ -38,7 +38,7 @@ process.pushDataToDb("data/process.json")
 
 # Then, create the graph database (remember first to run the
 # Blazegraph instance) using the related source data
-grp_endpoint = "http://192.168.15.10:9999/blazegraph/sparql"
+grp_endpoint = "http://192.168.15.4:9999/blazegraph/sparql"
 metadata = MetadataUploadHandler()
 metadata.setDbPathOrUrl(grp_endpoint)
 metadata.pushDataToDb("data/meta.csv")

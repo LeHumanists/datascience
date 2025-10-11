@@ -966,10 +966,10 @@ class BasicMashup(object):
                         person_id = str(person_id).strip()
 
                         # Determine if the person is an Author with VIAF or ULAN ID
-                        if re.match(r'(VIAF|ULAN)_\d+', person_id):
-                            person_list.append(Person(person_name, identifier=person_id))
-                        else:
-                            person_list.append(Person(person_name))
+                        if person_id and person_name:
+                            person_name = str(person_name).strip()
+                            person_id = str(person_id).strip()
+                            person_list.append(Person(person_id, person_name))
 
         print(f"Total unique people identified: {len(person_list)}")
         return person_list
