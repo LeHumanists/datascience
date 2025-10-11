@@ -655,7 +655,7 @@ class MetadataQueryHandler(QueryHandler):
             print("Error executing SPARQL query:", e)
             return pd.DataFrame()
 
-    def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame: # A L I C E
+    def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame:  # A L I C E
         query = f"""
         PREFIX dcterms: <http://purl.org/dc/terms/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -669,12 +669,15 @@ class MetadataQueryHandler(QueryHandler):
         """
         df = self.execute_query(query)
 
-        # Se mancano colonne o valori None, li puliamo
+        # Handle missing columns or None values
         if not df.empty:
             if "personName" not in df.columns:
                 df["personName"] = ""
-            df["personName"] = df["personName"].fillna("")  # sostituisce None con stringa vuota
-            df["personID"] = df["personID"].fillna("")      # per sicurezza, anche per ID
+            df["personName"] = df["personName"].fillna("")
+            df["personID"] = df["personID"].fillna("")
+
+            # ✅ Add the object_id as a new column
+            df["objectID"] = str(object_id)
 
         return df
 
