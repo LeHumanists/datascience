@@ -655,7 +655,7 @@ class MetadataQueryHandler(QueryHandler):
             print("Error executing SPARQL query:", e)
             return pd.DataFrame()
 
-    def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame: # A L I C E
+    def getAuthorsOfCulturalHeritageObject(self, object_id: str) -> pd.DataFrame:  # A L I C E
         query = f"""
         PREFIX dcterms: <http://purl.org/dc/terms/>
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -669,12 +669,15 @@ class MetadataQueryHandler(QueryHandler):
         """
         df = self.execute_query(query)
 
-        # Se mancano colonne o valori None, li puliamo
+        # Handle missing columns or None values
         if not df.empty:
             if "personName" not in df.columns:
                 df["personName"] = ""
-            df["personName"] = df["personName"].fillna("")  # sostituisce None con stringa vuota
-            df["personID"] = df["personID"].fillna("")      # per sicurezza, anche per ID
+            df["personName"] = df["personName"].fillna("")
+            df["personID"] = df["personID"].fillna("")
+
+            # ✅ Add the object_id as a new column
+            df["objectID"] = str(object_id)
 
         return df
 
@@ -1393,9 +1396,9 @@ class AdvancedMashup(BasicMashup):
         # update objectID column for join with refers_to
         conc_authors_CHO_df["objectID"] = "object_" + conc_authors_CHO_df["objectID"].astype(str)
         # subdataframe
-        authors_id_df = conc_authors_CHO_df[["objectID", "authorName"]]
+        authors_id_df = conc_authors_CHO_df[["objectID", "personName"]]
         # drop duplicated author names: keep only those with id and store ids in a different column
-        authors_id_df["authorID"] = authors_id_df["authorName"].str.extract(r'\((.*?)\)') #extract everything between parentheses (VIAF or ULAN id) and create a new column which stores the id
+        authors_id_df["authorID"] = authors_id_df["personName"].str.extract(r'\((.*?)\)') #extract everything between parentheses (VIAF or ULAN id) and create a new column which stores the id
 
         # acquisition df
         acq_df_list = []
@@ -1413,7 +1416,7 @@ class AdvancedMashup(BasicMashup):
 
         # extend the empty list with the objects of the class person compliant with the query
         for _, row in result_df.iterrows():
-            author = Person(id=row["authorID"], name=row["authorName"])
+            author = Person(id=row["authorID"], name=row["personName"])
             query_result.append(author)
         
         return query_result
