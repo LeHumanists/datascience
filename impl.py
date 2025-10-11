@@ -1364,45 +1364,33 @@ class AdvancedMashup(BasicMashup):
     def getAuthorsOfObjectsAcquiredInTimeFrame(self, start, end): # returns a list of objects of the class person
         query_result = []
 
-        if not self.metadataQuery or not self.processQuery:  # Check if there are any handlers in the list
-            raise ValueError("No handlers added to AdvancedMashup.")
+        # retrieve all cultural heritage objects
+        allCHO_df_list = []
+        for handler in self.metadataQuery:
+            allCHO_df = handler.getAllCulturalHeritageObjects()
+            allCHO_df_list.append(allCHO_df)
         
-        # retrieve the endpoint from the first MetadataQueryHandler
-        metadata_qh = self.metadataQuery[0]  # Use the first handler
-        endpoint = metadata_qh.getDbPathOrUrl()
-        if not endpoint:
-            raise ValueError("The endpoint has not been set in the MetadataQueryHandler.")
+        conc_CHO_df = pd.concat(allCHO_df_list, ignore_index=True).drop_duplicates()
+        allCHO_ID_df = conc_CHO_df[["id"]]
+        # store ids in a set
+        ID_set = set(allCHO_ID_df["id"])
 
-        # sparql query
-        sparql_query = """
-        PREFIX dcterms: <http://purl.org/dc/terms>
-        PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-
-        SELECT ?object ?author ?name
-        WHERE {
-            ?object dcterms:identifier ?id .
-            OPTIONAL { ?object dcterms:creator ?author . }
-            OPTIONAL { ?author foaf:name ?name . }
-        }
-        """
-
-        authors_cho_df = get(endpoint, sparql_query, True)
-      
-
-         # associate id to each object uri
-        objects_id = []
-        slug = ""
-       
-        for idx, row in authors_cho_df.iterrows(): # http://example.org/1
-            if row["object"]:
-                split_object = row["object"].split("/")
-                slug = split_object[-1]
-                objects_id.append("object_" + slug)
-            else:
-                print(f"Warning: No object associated to {authors_cho_df['author'].iloc[idx]}")
-
-        authors_cho_df.insert(3, "objects_id", pd.Series(objects_id, dtype="string"))
+        # call getAuthorsOfCHO method to retrieve info about authors
+        authors_CHO_df_list = []
+        for h in self.metadataQuery:
+            for obj_id in ID_set:
+                authors_CHO_df = h.getAuthorsOfCulturalHeritageObject(obj_id)
+                if authors_CHO_df is not None and not authors_CHO_df.empty:
+                    authors_CHO_df_list.append(authors_CHO_df)
         
+        conc_authors_CHO_df = pd.concat(authors_CHO_df_list, ignore_index=True).drop_duplicates().dropna(axis=0)
+        # update objectID column for join with refers_to
+        conc_authors_CHO_df["objectID"] = "object_" + conc_authors_CHO_df["objectID"].astype(str)
+        # subdataframe
+        authors_id_df = conc_authors_CHO_df[["objectID", "authorName"]]
+        # drop duplicated author names: keep only those with id and store ids in a different column
+        authors_id_df["authorID"] = authors_id_df["authorName"].str.extract(r'\((.*?)\)') #extract everything between parentheses (VIAF or ULAN id) and create a new column which stores the id
+
         # acquisition df
         acq_df_list = []
         for handler in self.processQuery:
@@ -1415,15 +1403,11 @@ class AdvancedMashup(BasicMashup):
         print("Advanced: df for all activities:\n", acq_timeframe_df.head())
         
         # merge resulting dataframes
-        result_df = pd.merge(authors_cho_df, acq_timeframe_df, left_on="objects_id", right_on="refers_to", how="inner")
+        result_df = pd.merge(authors_id_df, acq_timeframe_df, left_on="objectID", right_on="refers_to", how="inner")
 
         # extend the empty list with the objects of the class person compliant with the query
         for _, row in result_df.iterrows():
-            if pd.notna(row["author"]):
-                author_uri = row["author"]
-                name = row["name"]
-                split_author_uri = author_uri.split("/")
-                author_id = split_author_uri[-1].replace("_", ":")
-                query_result.append(Person(author_id, name))
+            author = Person(name=row["authorName"], id=row["authorID"])
+            query_result.append(author)
         
         return query_result
