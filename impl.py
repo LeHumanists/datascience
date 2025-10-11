@@ -1368,7 +1368,8 @@ class AdvancedMashup(BasicMashup):
         allCHO_df_list = []
         for handler in self.metadataQuery:
             allCHO_df = handler.getAllCulturalHeritageObjects()
-            allCHO_df_list.append(allCHO_df)
+            if allCHO_df is not None and not allCHO_df.empty:
+                allCHO_df_list.append(allCHO_df)
         
         conc_CHO_df = pd.concat(allCHO_df_list, ignore_index=True).drop_duplicates()
         allCHO_ID_df = conc_CHO_df[["id"]]
