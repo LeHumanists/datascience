@@ -1408,7 +1408,7 @@ class AdvancedMashup(BasicMashup):
 
         # extend the empty list with the objects of the class person compliant with the query
         for _, row in result_df.iterrows():
-            author = Person(name=row["authorName"], id=row["authorID"])
+            author = Person(id=row["authorID"], name=row["authorName"])
             query_result.append(author)
         
         return query_result
