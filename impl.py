@@ -525,7 +525,7 @@ class QueryHandler(Handler):
     def __init__(self, dbPathOrUrl: str = ""):
         super().__init__(dbPathOrUrl)
         
-    def getById(self, id: str): # in the data model, getById is a method of QueryHandler, which is superclass of MetadataQueryHandler and ProcessDataQueryHandler, so it should be inherited by both. should we move it here?
+    def getById(self, id: str): 
         pass 
 
 # QueryHandler has no additional attributes
@@ -1377,7 +1377,7 @@ class AdvancedMashup(BasicMashup):
         # check if list is empty
         if not allCHO_df_list:
             print("No Cultural Heritage Objects retrieved. Returning empty result.")
-            return []  # evita ValueError
+            return []
         # concatenate
         conc_CHO_df = pd.concat(allCHO_df_list, ignore_index=True).drop_duplicates()
         allCHO_ID_df = conc_CHO_df[["id"]]
