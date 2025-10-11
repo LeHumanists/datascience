@@ -1305,7 +1305,7 @@ class AdvancedMashup(BasicMashup):
 
         # Trova le attività gestite da quella persona
         activities = self.getActivitiesByResponsiblePerson(partialName)
-        if activities.empty:
+        if not activities:
             return results
 
         # Ottieni tutti gli oggetti culturali
