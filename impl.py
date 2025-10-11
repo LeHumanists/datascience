@@ -1371,6 +1371,11 @@ class AdvancedMashup(BasicMashup):
             if allCHO_df is not None and not allCHO_df.empty:
                 allCHO_df_list.append(allCHO_df)
         
+        # check if list is empty
+        if not allCHO_df_list:
+            print("No Cultural Heritage Objects retrieved. Returning empty result.")
+            return []  # evita ValueError
+        # concatenate
         conc_CHO_df = pd.concat(allCHO_df_list, ignore_index=True).drop_duplicates()
         allCHO_ID_df = conc_CHO_df[["id"]]
         # store ids in a set
